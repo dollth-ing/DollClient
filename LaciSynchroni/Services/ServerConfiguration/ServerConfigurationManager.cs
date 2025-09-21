@@ -11,6 +11,7 @@ using LaciSynchroni.SyncConfiguration.Models;
 using LaciSynchroni.WebAPI;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.Extensions.Logging;
+using System.Net.Http.Headers;
 
 namespace LaciSynchroni.Services.ServerConfiguration;
 
@@ -627,9 +628,9 @@ public class ServerConfigurationManager
         {
             var baseUri = serverUri.Replace("wss://", "https://").Replace("ws://", "http://");
             var oauthCheckUri = AuthRoutes.GetUIDsFullPath(new Uri(baseUri));
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-            var response = await _httpClient.GetAsync(oauthCheckUri).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, oauthCheckUri);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
             var responseStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             return await JsonSerializer
                     .DeserializeAsync<Dictionary<string, string>>(responseStream)
