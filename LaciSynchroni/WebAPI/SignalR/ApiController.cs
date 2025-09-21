@@ -15,6 +15,7 @@ using LaciSynchroni.WebAPI.SignalR;
 using LaciSynchroni.WebAPI.SignalR.Utils;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
+using System.Net;
 
 namespace LaciSynchroni.WebAPI;
 
@@ -30,6 +31,7 @@ public sealed partial class ApiController : DisposableMediatorSubscriberBase, IS
     private readonly ServerConfigurationManager _serverManager;
     private readonly TokenProvider _tokenProvider;
     private readonly SyncConfigService _syncConfigService;
+    private readonly HttpClient _httpClient;
     private CancellationTokenSource _connectionCancellationTokenSource;
     private ConnectionDto? _connectionDto;
     private bool _doNotNotifyOnNextInfo = false;
@@ -48,8 +50,7 @@ public sealed partial class ApiController : DisposableMediatorSubscriberBase, IS
         ServerConfigurationManager serverManager,
         SyncMediator mediator,
         TokenProvider tokenProvider,
-        SyncConfigService syncConfigService
-    )
+        SyncConfigService syncConfigService, HttpClient httpClient)
         : base(logger, mediator)
     {
         _hubFactory = hubFactory;
@@ -58,6 +59,7 @@ public sealed partial class ApiController : DisposableMediatorSubscriberBase, IS
         _serverManager = serverManager;
         _tokenProvider = tokenProvider;
         _syncConfigService = syncConfigService;
+        _httpClient = httpClient;
         _connectionCancellationTokenSource = new CancellationTokenSource();
 
         Mediator.Subscribe<DalamudLoginMessage>(this, (_) => DalamudUtilOnLogIn());
@@ -281,33 +283,17 @@ public sealed partial class ApiController : DisposableMediatorSubscriberBase, IS
                 if (token.IsCancellationRequested)
                     break;
 
-                var overridePaths = new[] { null, IServerHub.Path, "/mare" };
-                foreach (var pathOverride in overridePaths)
+                var hubUrl = await FindHubUrl(_serverManager.CurrentServer).ConfigureAwait(false);
+                if (hubUrl.IsNullOrEmpty())
                 {
-                    if (!_serverManager.CurrentServer.UseAdvancedUris && pathOverride == null)
-                        continue;
-
-                    try
-                    {
-                        _serverHub = _hubFactory.GetOrCreate(token, pathOverride);
-                        InitializeApiHooks();
-
-                        await _serverHub.StartAsync(token).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        if (string.Equals(pathOverride, overridePaths[^1], StringComparison.Ordinal))
-                        {
-                            throw;
-                        }
-
-                        if (_serverHub != null)
-                        {
-                            await _hubFactory.DisposeHubAsync().ConfigureAwait(false);
-                            _serverHub = null;
-                        }
-                    }
+                    await StopConnectionAsync(ServerState.VersionMisMatch).ConfigureAwait(false);
+                    return;
                 }
+                _serverHub = _hubFactory.GetOrCreate(token, hubUrl);
+                
+                InitializeApiHooks();
+
+                await _serverHub.StartAsync(token).ConfigureAwait(false);
 
                 _connectionDto = await GetConnectionDto().ConfigureAwait(false);
 
@@ -738,6 +724,38 @@ public sealed partial class ApiController : DisposableMediatorSubscriberBase, IS
         }
 
         ServerState = state;
+    }
+    
+    private async Task<string?> FindHubUrl(ServerStorage server)
+    {
+        var configuredHubUri = server.ServerHubUri.Replace("wss://", "https://").Replace("ws://", "http://");
+        var baseUri = server.ServerUri.Replace("wss://", "https://").Replace("ws://", "http://");
+        if (baseUri.EndsWith("/", StringComparison.Ordinal))
+        {
+            baseUri = baseUri.Remove(baseUri.Length - 1);
+        }
+        
+        // Essentially, we try every hub we are aware of plus the configured hub to see if we can find a connection
+        var hubsToCheck = new[] { configuredHubUri, baseUri + IServerHub.Path, baseUri + "/mare" };
+        foreach (var hubToCheck in hubsToCheck)
+        {
+            if (hubToCheck.IsNullOrEmpty())
+            {
+                continue;
+            }
+            var resHub = await _httpClient.GetAsync(hubToCheck).ConfigureAwait(false);
+            // If we get a 401, 200 or 204 we have found a hub. The last two should not happen, 401 means that the URL is valid and likely a hub connection
+            // We could try to emulate the /negotiate, but for now, this should work just as well
+            if (resHub.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.OK or HttpStatusCode.NoContent)
+            {
+                Logger.LogInformation("{HubUri}: Valid hub, using", hubToCheck);
+                return hubToCheck;
+            }
+            Logger.LogWarning("{HubUri}: Not valid, attempting next hub", hubToCheck);
+        }
+
+        Logger.LogError("Unable to find any hub to connect to, aborting connection attempt.");
+        return null;
     }
 }
 #pragma warning restore MA0040

@@ -58,7 +58,7 @@ public class HubFactory : MediatorSubscriberBase
         Logger.LogDebug("Current HubConnection disposed");
     }
 
-    public HubConnection GetOrCreate(CancellationToken ct, string? hubPathOverride = null)
+    public HubConnection GetOrCreate(CancellationToken ct, string hubUrl)
     {
         if (!_isDisposed && _instance != null)
             return _instance;
@@ -89,13 +89,6 @@ public class HubFactory : MediatorSubscriberBase
             transportType = HttpTransportType.ServerSentEvents | HttpTransportType.LongPolling;
         }
 
-        var cs = _serverConfigurationManager.CurrentServer;
-
-        var useAdvancedUris = cs.UseAdvancedUris;
-        var serverHubUri = cs.ServerHubUri;
-
-        var hasCustomHubPath = useAdvancedUris && !string.IsNullOrEmpty(serverHubUri) && string.IsNullOrEmpty(hubPathOverride);
-        var hubUrl = hasCustomHubPath ? serverHubUri : cs.ServerUri + (hubPathOverride ?? IServerHub.Path);
 
         Logger.LogDebug("Building new HubConnection using transport {Transport}", transportType);
 
