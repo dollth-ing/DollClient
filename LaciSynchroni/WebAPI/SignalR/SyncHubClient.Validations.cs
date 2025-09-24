@@ -113,12 +113,10 @@ public partial class SyncHubClient
 
         if (connectionDto.CurrentClientVersion > currentClientVer)
         {
+            // Can't really check for version anymore, since some servers have their own plugin
             var pluginVersion = string.Create(CultureInfo.InvariantCulture, $"{currentClientVer.Major}.{currentClientVer.Minor}.{currentClientVer.Build}.{currentClientVer.Revision}");
             var currentClientVersion = string.Create(CultureInfo.InvariantCulture, $"{connectionDto.CurrentClientVersion.Major}.{connectionDto.CurrentClientVersion.Minor}.{connectionDto.CurrentClientVersion.Build}.{connectionDto.CurrentClientVersion.Revision}");
-            Mediator.Publish(new NotificationMessage("Client outdated",
-                $"Your client is outdated ({pluginVersion}), current is: {currentClientVersion}. " +
-                $"Please keep {_dalamudUtil.GetPluginName()} up-to-date.",
-                NotificationType.Warning));
+            Logger.LogWarning("Client outed for {ServerName}. Expected version is {PluginVersion}, current version is {CurrentVersion}", ServerToUse.ServerName, pluginVersion, currentClientVersion);
         }
 
         if (_dalamudUtil.HasModifiedGameFiles)
