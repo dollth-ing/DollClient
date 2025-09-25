@@ -74,6 +74,8 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         var traceDir = Path.Join(pluginInterface.ConfigDirectory.FullName, "tracelog");
+        if (!Directory.Exists(traceDir))
+            Directory.CreateDirectory(traceDir);
 
         foreach (
             var file in Directory
