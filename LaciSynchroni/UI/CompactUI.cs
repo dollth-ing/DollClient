@@ -651,8 +651,8 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
         
         
-            ImGui.SameLine(ImGui.GetWindowWidth() - 30);
-            _uiSharedService.IconText(FontAwesomeIcon.PersonCircleQuestion);
+            ImGui.SameLine(ImGui.GetWindowWidth() - 31);
+            _uiSharedService.IconButton(FontAwesomeIcon.PersonCircleQuestion);
             if (ImGui.IsItemHovered())
             {
                 var unconvertedTextures = _characterAnalyzer.UnconvertedTextureCount;
@@ -673,16 +673,16 @@ public class CompactUi : WindowMediatorSubscriberBase
                 }
             }
 
-        ImGui.TextUnformatted("Tri.:");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"{playerLoadTriangles}");
-        
-        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
         ImGui.TextUnformatted("Mem.:");
         ImGui.SameLine();
         ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
         
-        ImGui.SameLine(ImGui.GetWindowWidth() - 30);
+        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
+        ImGui.TextUnformatted("Tri.:");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{playerLoadTriangles}");
+        
+        ImGui.SameLine(ImGui.GetWindowWidth() - 28);
         ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
         _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
         if (ImGui.IsItemHovered())
@@ -697,7 +697,7 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)
     {
-        float width = (ImGui.GetWindowWidth() - 60);
+        float width = (ImGui.GetWindowWidth() - 54);
         var progressBarSize = new Vector2(width/2, 20);
 
         if (warning)
