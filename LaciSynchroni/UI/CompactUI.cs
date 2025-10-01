@@ -613,46 +613,8 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         var playerLoadMemory = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.OriginalSize));
         var playerLoadTriangles = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.Triangles));
-
-        var dataSectionTitle = "Character Load Data";
-        var origTextSizeX = ImGui.CalcTextSize(dataSectionTitle).X - ImGui.GetStyle().ItemSpacing.X;
-
-        using (_uiSharedService.IconFont.Push())
-        {
-            origTextSizeX += ImGui.CalcTextSize(FontAwesomeIcon.QuestionCircle.ToIconString()).X;
-        }
-
-        ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (origTextSizeX / 2));
-        ImGui.TextUnformatted(dataSectionTitle);
-        _uiSharedService.DrawHelpText("This information uses your own settings for the warning and auto-pause threshold for comparison." + Environment.NewLine
-            + "This can be configured under Settings -> Performance.");
-
-        ImGui.TextUnformatted("Mem.:");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
-
-
-        if (config.WarnOnExceedingThresholds && _characterAnalyzer.HasUnconvertedTextures)
-        {
-            ImGui.SameLine();
-            _uiSharedService.IconText(FontAwesomeIcon.PersonCircleQuestion);
-            if (ImGui.IsItemHovered())
-            {
-                var unconvertedTextures = _characterAnalyzer.UnconvertedTextureCount;
-
-                if (ImGui.IsItemClicked())
-                {
-                    Mediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
-                }
-                if (unconvertedTextures > 0)
-                {
-                    UiSharedService.AttachToolTip($"You have {unconvertedTextures} texture(s) that are not BCn format. Consider converting them to BC7 to reduce their size." +
-                        UiSharedService.TooltipSeparator +
-                        "Click to open the Character Data Analysis");
-                }
-            }
-        }
-
+        
+        
         if (config.VRAMSizeAutoPauseThresholdMiB > 0)
         {
             var _playerLoadMemoryKiB = playerLoadMemory / 1024;
@@ -666,17 +628,12 @@ public class CompactUi : WindowMediatorSubscriberBase
 
             if (_playerLoadMemoryKiB > vramAutoPauseThreshold)
                 alert = true;
-
-            ImGuiHelpers.ScaledRelativeSameLine(180, ImGui.GetStyle().ItemSpacing.X);
+            
             var calculatedRam = (float)_playerLoadMemoryKiB / (vramAutoPauseThreshold);
 
             DrawProgressBar(calculatedRam, "VRAM usage", warning, alert);
         }
-
-        ImGui.TextUnformatted("Tri.:");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"{playerLoadTriangles}");
-
+        
         if (config.TrisAutoPauseThresholdThousands > 0)
         {
             var warning = false;
@@ -687,19 +644,61 @@ public class CompactUi : WindowMediatorSubscriberBase
             if (playerLoadTriangles > config.TrisAutoPauseThresholdThousands * 1000)
                 alert = true;
 
-            ImGuiHelpers.ScaledRelativeSameLine(180, ImGui.GetStyle().ItemSpacing.X);
+            ImGui.SameLine();
             var calculatedTriangles = ((float)playerLoadTriangles / (config.TrisAutoPauseThresholdThousands * 1000));
 
             DrawProgressBar(calculatedTriangles, "Triangle count", warning, alert);
         }
+        
+        
+            ImGui.SameLine(ImGui.GetWindowWidth() - 30);
+            _uiSharedService.IconText(FontAwesomeIcon.PersonCircleQuestion);
+            if (ImGui.IsItemHovered())
+            {
+                var unconvertedTextures = _characterAnalyzer.UnconvertedTextureCount;
 
+                if (ImGui.IsItemClicked())
+                {
+                    Mediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
+                }
+                if (unconvertedTextures > 0)
+                {
+                    UiSharedService.AttachToolTip($"You have {unconvertedTextures} texture(s) that are not BCn format. Consider converting them to BC7 to reduce their size." +
+                                                  UiSharedService.TooltipSeparator +
+                                                  "Click to open the Character Data Analysis");
+                }
+                if (unconvertedTextures == 0)
+                {
+                    UiSharedService.AttachToolTip($"Click to open the Character Data Analysis");
+                }
+            }
+
+        ImGui.TextUnformatted("Tri.:");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{playerLoadTriangles}");
+        
+        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
+        ImGui.TextUnformatted("Mem.:");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
+        
+        ImGui.SameLine(ImGui.GetWindowWidth() - 30);
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
+        _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
+        if (ImGui.IsItemHovered())
+        {
+            UiSharedService.AttachToolTip($"This information uses your own settings for the warning and auto-pause threshold for comparison." + Environment.NewLine + 
+                                          "This can be configured under Settings -> Performance.");
+        }
+        ImGui.PopStyleColor();
+        
         ImGui.Separator();
     }
 
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)
     {
-        float width = Math.Max(170, ImGui.GetContentRegionAvail().X);
-        var progressBarSize = new Vector2(width, 20);
+        float width = (ImGui.GetWindowWidth() - 60);
+        var progressBarSize = new Vector2(width/2, 20);
 
         if (warning)
             ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudYellow);
