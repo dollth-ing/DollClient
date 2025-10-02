@@ -2,6 +2,8 @@
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.GameFonts;
+using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
@@ -332,32 +334,36 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private void DrawServerStatus()
     {
-        Vector2 rectMin;
-
         if (_apiController.ConnectedServerIndexes.Length >= 1)
         {
-            rectMin = new Vector2(ImGui.GetWindowContentRegionMin().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
-
             var onlineMessage = "Loading";
-
-            if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length == 1)
-            {
-                onlineMessage = _apiController.GetDisplayNameByServer(_apiController.ConnectedServerIndexes.FirstOrDefault());
-            }
-            if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length > 1)
-            {
-                onlineMessage = _apiController.ConnectedServerIndexes.Length + "/" +
-                                    _apiController.EnabledServerIndexes.Length + " Online";
-            }
-            if (!_apiController.AnyServerConnected)
-            {
-                onlineMessage = "Offline";
-            }
             
-            ImGui.AlignTextToFramePadding();
-            ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
-            ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
-            ImGui.SameLine(160);
+            using (_uiSharedService.UidFont.Push())
+            {
+                if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length == 1)
+                {
+                    onlineMessage =
+                        _apiController.GetDisplayNameByServer(_apiController.ConnectedServerIndexes.FirstOrDefault());
+                }
+
+                if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length > 1)
+                {
+                    onlineMessage = _apiController.ConnectedServerIndexes.Length + "/" +
+                                    _apiController.EnabledServerIndexes.Length + " Online";
+                }
+
+                if (!_apiController.AnyServerConnected)
+                {
+                    onlineMessage = "Offline";
+                }
+                
+                ImGui.AlignTextToFramePadding();
+                ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
+                ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
+                ImGui.SameLine(160);
+            }
+
+            
             using (ImRaii.PushId("uploads")) DrawUploads();
         }
 

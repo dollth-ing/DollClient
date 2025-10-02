@@ -114,7 +114,7 @@ public partial class UiSharedService : DisposableMediatorSubscriberBase
         {
             e.OnPreBuild(tk => tk.AddDalamudAssetFont(DalamudAsset.NotoSansJpMedium, new()
             {
-                SizePx = 35
+                SizePx = 30
             }));
         });
         GameFont = _pluginInterface.UiBuilder.FontAtlas.NewGameFontHandle(new(GameFontFamilyAndSize.Axis12));
