@@ -334,66 +334,54 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         Vector2 rectMin;
 
-        if (_apiController.ConnectedServerIndexes.Length > 1)
+        if (_apiController.ConnectedServerIndexes.Length >= 1)
         {
             rectMin = new Vector2(ImGui.GetWindowContentRegionMin().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
 
-            if (_apiController.AnyServerConnected)
-            {
-                ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.ParsedGreen);
-                ImGui.AlignTextToFramePadding();
-                ImGui.Text(_apiController.ConnectedServerIndexes.Length + "/" +
-                           _apiController.EnabledServerIndexes.Length + " Online");
-                ImGui.PopStyleColor();
-                ImGui.SameLine(150);
-                using (ImRaii.PushId("uploads")) DrawUploads();
-            }
+            var onlineMessage = "Loading";
 
+            if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length == 1)
+            {
+                onlineMessage = _apiController.GetDisplayNameByServer(_apiController.ConnectedServerIndexes.FirstOrDefault());
+            }
+            if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length > 1)
+            {
+                onlineMessage = _apiController.ConnectedServerIndexes.Length + "/" +
+                                    _apiController.EnabledServerIndexes.Length + " Online";
+            }
             if (!_apiController.AnyServerConnected)
             {
-                ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudRed);
-                ImGui.Text("Offline");
-                ImGui.PopStyleColor();
-                ImGui.SameLine(150);
-                using (ImRaii.PushId("uploads")) DrawUploads();
+                onlineMessage = "Offline";
             }
-        }
-        else
-        {
-            using (ImRaii.PushId("singleserveruid"))
-                DrawUIDHeader(_apiController.ConnectedServerIndexes.FirstOrDefault());
-            ImGui.Separator();
-            rectMin = new Vector2(ImGui.GetWindowContentRegionMin().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
-            ImGui.SameLine();
+            
+            ImGui.AlignTextToFramePadding();
+            ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
+            ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
+            ImGui.SameLine(160);
             using (ImRaii.PushId("uploads")) DrawUploads();
         }
 
         if (_apiController.AnyServerConnected)
         {
+            
             var usersOnlineMessage = "Users Online";
             var userCount = _apiController.OnlineUsers.ToString(CultureInfo.InvariantCulture);
 
             ImGui.AlignTextToFramePadding();
+            ImGui.SetCursorPosX((150 - ImGui.CalcTextSize(usersOnlineMessage + userCount).X) / 2);
             ImGui.TextColored(ImGuiColors.ParsedGreen, userCount);
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(usersOnlineMessage);
-            ImGui.SameLine(150);
+            ImGui.SameLine(160);
             using (ImRaii.PushId("downloads")) DrawDownloads();
         }
         else
         {
             var notConnectedMessage = "Not connected to any server";
-
-            ImGui.SetCursorPosX(ImGui.GetWindowContentRegionMin().X +
-                UiSharedService.GetWindowContentRegionWidth() / 2 - ImGui.CalcTextSize(notConnectedMessage).X / 2);
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(ImGuiColors.DalamudRed, notConnectedMessage);
         }
-
-        var rectMax = new Vector2(ImGui.GetWindowContentRegionMax().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
-
-        DrawServerStatusTooltipAndToggle(rectMin, rectMax);
     }
 
     private void DrawUIDHeader(int serverId)
