@@ -2,9 +2,6 @@
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
-using Dalamud.Interface.GameFonts;
-using Dalamud.Interface.ManagedFontAtlas;
-using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
 using LaciSynchroni.Common.Data.Extensions;
@@ -53,35 +50,18 @@ public class CompactUi : WindowMediatorSubscriberBase
     private readonly UiSharedService _uiSharedService;
     private readonly CharacterAnalyzer _characterAnalyzer;
     private readonly PlayerPerformanceConfigService _playerPerformanceConfigService;
-    private readonly ServerConfigService _serverConfigService;
     private Dictionary<ObjectKind, Dictionary<string, CharacterAnalyzer.FileDataEntry>>? _cachedAnalysis;
-    private bool _hasUpdate = false;
+    private bool _hasUpdate;
     private List<IDrawFolder> _drawFolders;
     private Pair? _lastAddedUser;
     private string _lastAddedUserComment = string.Empty;
     private Vector2 _lastPosition = Vector2.One;
     private Vector2 _lastSize = Vector2.One;
-    private int _secretKeyIdx = -1;
     private bool _showModalForUserAddition;
     private float _transferPartHeight;
     private bool _wasOpen;
     private float _windowContentWidth;
-    private bool _showMultiServerSelect = false;
-    private string _filter = string.Empty;
-    
-    public string Filter
-    {
-        get => _filter;
-        private set
-        {
-            if (!string.Equals(_filter, value, StringComparison.OrdinalIgnoreCase))
-            {
-                _syncMediator.Publish(new RefreshUiMessage());
-            }
-
-            _filter = value;
-        }
-    }
+    private bool _showMultiServerSelect;
 
     public CompactUi(ILogger<CompactUi> logger, UiSharedService uiShared, SyncConfigService configService,
         ApiController apiController, PairManager pairManager,
@@ -90,7 +70,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         SelectPairForTagUi selectPairForTagUi,
         PerformanceCollectorService performanceCollectorService, IpcManager ipcManager,
         CharacterAnalyzer characterAnalyzer, PlayerPerformanceConfigService playerPerformanceConfigService,
-        ServerConfigService serverConfigService, SyncMediator syncMediator)
+        SyncMediator syncMediator)
         : base(logger, mediator, "###LaciSynchroniMainUI", performanceCollectorService)
     {
         _uiSharedService = uiShared;
@@ -107,7 +87,6 @@ public class CompactUi : WindowMediatorSubscriberBase
         _characterAnalyzer = characterAnalyzer;
         _syncMediator = syncMediator;
         _playerPerformanceConfigService = playerPerformanceConfigService;
-        _serverConfigService = serverConfigService;
         _tabMenu = new TopTabMenu(Mediator, _apiController, _pairManager, _uiSharedService, _serverConfigManager);
 
         CheckForCharacterAnalysis();
@@ -190,21 +169,6 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
 
         _windowContentWidth = UiSharedService.GetWindowContentRegionWidth();
-        // if (!_apiController.IsCurrentVersion)
-        // {
-        //     var ver = _apiController.CurrentClientVersion;
-        //     var versionString = string.Create(CultureInfo.InvariantCulture, $"{ver.Major}.{ver.Minor}.{ver.Build}.{ver.Revision}");
-        //     var unsupported = "UNSUPPORTED VERSION";
-        //     using (_uiSharedService.UidFont.Push())
-        //     {
-        //         var uidTextSize = ImGui.CalcTextSize(unsupported);
-        //         ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X + ImGui.GetWindowContentRegionMin().X) / 2 - uidTextSize.X / 2);
-        //         ImGui.AlignTextToFramePadding();
-        //         ImGui.TextColored(ImGuiColors.DalamudRed, unsupported);
-        //     }
-        //     UiSharedService.ColorTextWrapped($"Your Laci Synchroni installation is out of date, the current version is {versionString}. " +
-        //         $"It is highly recommended to keep Laci Synchroni up to date. Open /xlplugins and update the plugin.", ImGuiColors.DalamudRed);
-        // }
 
         if (!_ipcManager.Initialized)
         {
@@ -229,13 +193,13 @@ public class CompactUi : WindowMediatorSubscriberBase
             if (!penumAvailable)
             {
                 UiSharedService.TextWrapped("Penumbra");
-                _uiSharedService.BooleanToColoredIcon(penumAvailable, true);
+                _uiSharedService.BooleanToColoredIcon(penumAvailable);
             }
 
             if (!glamAvailable)
             {
                 UiSharedService.TextWrapped("Glamourer");
-                _uiSharedService.BooleanToColoredIcon(glamAvailable, true);
+                _uiSharedService.BooleanToColoredIcon(glamAvailable);
             }
 
             ImGui.Separator();
@@ -454,70 +418,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
         UiSharedService.AttachToolTip("Toggle the server connections list");
     }
-
-    private void DrawUIDHeader(int serverId)
-    {
-        var uidText = GetUidTextMultiServer(serverId);
-        var uidColor = GetUidColorByServer(serverId);
-
-        using (_uiSharedService.UidFont.Push())
-        {
-            var uidTextSize = ImGui.CalcTextSize(uidText);
-            ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 -
-                                (uidTextSize.X / 2));
-            ImGui.TextColored(uidColor, uidText);
-        }
-
-        if (_apiController.AnyServerConnected)
-        {
-            var currentDisplayName = _apiController.GetDisplayNameByServer(serverId);
-            var currentUid = _apiController.GetUidByServer(serverId);
-            if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
-            {
-                ImGui.SetClipboardText(currentDisplayName);
-            }
-
-            UiSharedService.AttachToolTip("Click to copy");
-
-            if (!string.Equals(currentDisplayName, currentUid, StringComparison.Ordinal))
-            {
-                var origTextSize = ImGui.CalcTextSize(currentDisplayName);
-                ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 -
-                                    (origTextSize.X / 2));
-                ImGui.TextColored(uidColor, currentDisplayName);
-                if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
-                {
-                    ImGui.SetClipboardText(currentDisplayName);
-                }
-
-                UiSharedService.AttachToolTip("Click to copy");
-            }
-        }
-        else if (_apiController.GetServerState(serverId) is not (ServerState.Disconnected or ServerState.Offline))
-        {
-            var errorText = GetServerErrorByServer(serverId);
-            var origTextSize = ImGui.CalcTextSize(errorText);
-            ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 -
-                                (origTextSize.X / 2));
-            UiSharedService.ColorTextWrapped(errorText, uidColor);
-        }
-    }
-
-    private void DrawServerStatusTooltipAndToggle(Vector2 rectMin, Vector2 rectMax)
-    {
-        if (!ImGui.IsMouseHoveringRect(rectMin, rectMax))
-            return;
-
-        if (ImGui.IsWindowHovered())
-        {
-            ImGui.SetTooltip("Click to manage service connections");
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-            {
-                ToggleMultiServerSelect();
-            }
-        }
-    }
-
+    
     private void ToggleMultiServerSelect()
     {
         _showMultiServerSelect = !_showMultiServerSelect;
