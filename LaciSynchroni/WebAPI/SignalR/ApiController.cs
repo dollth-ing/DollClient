@@ -143,6 +143,13 @@ public sealed partial class ApiController : DisposableMediatorSubscriberBase
             return [.._syncClients.Where(p=> p.Value._serverState == ServerState.Connected)?.Select(p=> p.Key) ?? []];
         }
     }
+    
+    public int[] EnabledServerIndexes {
+        get
+        {
+            return [.._syncClients?.Select(p=> p.Key) ?? []];
+        }
+    }
 
     public bool IsServerConnecting(ServerIndex index)
     {
