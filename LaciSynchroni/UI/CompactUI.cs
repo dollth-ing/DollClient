@@ -41,6 +41,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         new();
 
     private readonly DrawEntityFactory _drawEntityFactory;
+    private readonly SyncMediator _syncMediator;
     private readonly FileUploadManager _fileTransferManager;
     private readonly PairManager _pairManager;
     private readonly SelectTagForPairUi _selectGroupForPairUi;
@@ -66,6 +67,21 @@ public class CompactUi : WindowMediatorSubscriberBase
     private bool _wasOpen;
     private float _windowContentWidth;
     private bool _showMultiServerSelect = false;
+    private string _filter = string.Empty;
+    
+    public string Filter
+    {
+        get => _filter;
+        private set
+        {
+            if (!string.Equals(_filter, value, StringComparison.OrdinalIgnoreCase))
+            {
+                _syncMediator.Publish(new RefreshUiMessage());
+            }
+
+            _filter = value;
+        }
+    }
 
     public CompactUi(ILogger<CompactUi> logger, UiSharedService uiShared, SyncConfigService configService,
         ApiController apiController, PairManager pairManager,
@@ -74,7 +90,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         SelectPairForTagUi selectPairForTagUi,
         PerformanceCollectorService performanceCollectorService, IpcManager ipcManager,
         CharacterAnalyzer characterAnalyzer, PlayerPerformanceConfigService playerPerformanceConfigService,
-        ServerConfigService serverConfigService)
+        ServerConfigService serverConfigService, SyncMediator syncMediator)
         : base(logger, mediator, "###LaciSynchroniMainUI", performanceCollectorService)
     {
         _uiSharedService = uiShared;
@@ -89,6 +105,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         _selectPairsForGroupUi = selectPairForTagUi;
         _ipcManager = ipcManager;
         _characterAnalyzer = characterAnalyzer;
+        _syncMediator = syncMediator;
         _playerPerformanceConfigService = playerPerformanceConfigService;
         _serverConfigService = serverConfigService;
         _tabMenu = new TopTabMenu(Mediator, _apiController, _pairManager, _uiSharedService, _serverConfigManager);
@@ -169,9 +186,9 @@ public class CompactUi : WindowMediatorSubscriberBase
             MinimumSize = new Vector2(375, 420), MaximumSize = new Vector2(600, 2000),
         };
     }
-
     protected override void DrawInternal()
     {
+
         _windowContentWidth = UiSharedService.GetWindowContentRegionWidth();
         // if (!_apiController.IsCurrentVersion)
         // {
@@ -227,9 +244,9 @@ public class CompactUi : WindowMediatorSubscriberBase
         DrawMultiServerSection();
 
         using (ImRaii.PushId("serverstatus")) DrawServerStatus();
-
+        
         ImGui.Separator();
-
+        
         if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
         {
             using (ImRaii.PushId("modload")) DrawModLoad();
@@ -243,6 +260,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         {
             using (ImRaii.PushId("pairlist")) DrawPairs();
             ImGui.Separator();
+            using (ImRaii.PushId("filter")) _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X, ImGui.GetStyle().ItemSpacing.X);
         }
         else
         {
@@ -306,7 +324,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var ySize = _transferPartHeight == 0
             ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y
+            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 24
                   + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) -
               _transferPartHeight - ImGui.GetCursorPosY();
 
@@ -318,7 +336,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var ySize = _transferPartHeight == 0
             ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y
+            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 24
                   + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) -
               _transferPartHeight - ImGui.GetCursorPosY();
 
@@ -338,7 +356,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         {
             var onlineMessage = "Loading";
             var currentDisplayName = "Loading";
-            
+
             using (_uiSharedService.UidFont.Push())
             {
                 if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1)
@@ -358,19 +376,20 @@ public class CompactUi : WindowMediatorSubscriberBase
                 {
                     onlineMessage = "Offline";
                 }
-                
+
                 ImGui.AlignTextToFramePadding();
                 ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
                 ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
                 ImGui.SameLine(160);
             }
-            
-            if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1 )
+
+            if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1)
             {
                 if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
                 {
                     ImGui.SetClipboardText(currentDisplayName);
                 }
+
                 UiSharedService.AttachToolTip("Click to copy");
             }
 
@@ -380,15 +399,15 @@ public class CompactUi : WindowMediatorSubscriberBase
                 {
                     ToggleMultiServerSelect();
                 }
+
                 UiSharedService.AttachToolTip("Open Service List");
             }
-            
+
             using (ImRaii.PushId("uploads")) DrawUploads();
         }
 
         if (_apiController.AnyServerConnected)
         {
-            
             var usersOnlineMessage = "Users Online";
             var userCount = _apiController.OnlineUsers.ToString(CultureInfo.InvariantCulture);
 
@@ -400,7 +419,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             ImGui.TextUnformatted(usersOnlineMessage);
             ImGui.SameLine(160);
 
-            
+
             using (ImRaii.PushId("downloads")) DrawDownloads();
         }
         else
@@ -409,6 +428,31 @@ public class CompactUi : WindowMediatorSubscriberBase
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(ImGuiColors.DalamudRed, notConnectedMessage);
         }
+        
+        ImGui.Spacing();
+        ImGui.Spacing();
+        
+        var spacing = ImGui.GetStyle().ItemSpacing;
+        var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
+        
+        var buttonX = (availableWidth - spacing.X - 8) / 3f;
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Cog, "Settings", buttonX))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
+        }
+        UiSharedService.AttachToolTip("Open Laci Synchroni settings");
+        ImGui.SameLine();
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Running, "Data Hub", buttonX))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(CharaDataHubUi)));
+        }
+        UiSharedService.AttachToolTip("Open the character data hub");
+        ImGui.SameLine();
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Satellite, "Service List", buttonX))
+        {
+            _syncMediator.Publish(new ToggleServerSelectMessage());
+        }
+        UiSharedService.AttachToolTip("Toggle the server connections list");
     }
 
     private void DrawUIDHeader(int serverId)
@@ -658,7 +702,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             _ => "Offline"
         };
     }
-
+    
     private void DrawModLoad()
     {
         CheckForCharacterAnalysis();
@@ -673,7 +717,28 @@ public class CompactUi : WindowMediatorSubscriberBase
         var playerLoadMemory = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.OriginalSize));
         var playerLoadTriangles = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.Triangles));
 
+        ImGui.TextUnformatted("Mem:");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
 
+        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
+        ImGui.TextUnformatted("Tri:");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{playerLoadTriangles}");
+
+        ImGui.SameLine(ImGui.GetWindowWidth() - 27);
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
+        _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
+        if (ImGui.IsItemHovered())
+        {
+            UiSharedService.AttachToolTip(
+                $"This information uses your own settings for the warning and auto-pause threshold for comparison." +
+                Environment.NewLine +
+                "This can be configured under Settings -> Performance.");
+        }
+
+        ImGui.PopStyleColor();
+        
         if (config.VRAMSizeAutoPauseThresholdMiB > 0)
         {
             var _playerLoadMemoryKiB = playerLoadMemory / 1024;
@@ -690,7 +755,7 @@ public class CompactUi : WindowMediatorSubscriberBase
 
             var calculatedRam = (float)_playerLoadMemoryKiB / (vramAutoPauseThreshold);
 
-            DrawProgressBar(calculatedRam, "VRAM usage", warning, alert);
+            DrawProgressBar(calculatedRam, "Autopause VRAM usage", warning, alert);
         }
 
         if (config.TrisAutoPauseThresholdThousands > 0)
@@ -706,7 +771,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             ImGui.SameLine();
             var calculatedTriangles = ((float)playerLoadTriangles / (config.TrisAutoPauseThresholdThousands * 1000));
 
-            DrawProgressBar(calculatedTriangles, "Triangle count", warning, alert);
+            DrawProgressBar(calculatedTriangles, "Autopause Triangle count", warning, alert);
         }
 
 
@@ -735,28 +800,6 @@ public class CompactUi : WindowMediatorSubscriberBase
             }
         }
 
-        ImGui.TextUnformatted("Mem.:");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
-
-        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
-        ImGui.TextUnformatted("Tri.:");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"{playerLoadTriangles}");
-
-        ImGui.SameLine(ImGui.GetWindowWidth() - 27);
-        ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
-        _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
-        if (ImGui.IsItemHovered())
-        {
-            UiSharedService.AttachToolTip(
-                $"This information uses your own settings for the warning and auto-pause threshold for comparison." +
-                Environment.NewLine +
-                "This can be configured under Settings -> Performance.");
-        }
-
-        ImGui.PopStyleColor();
-
         ImGui.Separator();
     }
 
@@ -781,7 +824,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var currentUploads = _fileTransferManager.CurrentUploads.ToList();
         ImGui.AlignTextToFramePadding();
-        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
         _uiSharedService.IconText(FontAwesomeIcon.Upload);
         ImGui.SameLine();
 
@@ -791,18 +834,18 @@ public class CompactUi : WindowMediatorSubscriberBase
             var doneUploads = currentUploads.Count(c => c.IsTransferred);
             var totalUploaded = currentUploads.Sum(c => c.Transferred);
             var totalToUpload = currentUploads.Sum(c => c.Total);
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
             ImGui.TextUnformatted($"{doneUploads}/{totalUploads}");
             var uploadText =
                 $"({UiSharedService.ByteToString(totalUploaded)}/{UiSharedService.ByteToString(totalToUpload)})";
             ImGui.SameLine();
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
             ImGui.TextUnformatted(uploadText);
         }
         else
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
             ImGui.TextUnformatted("N/A");
         }
     }
@@ -811,7 +854,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var currentDownloads = _currentDownloads.SelectMany(d => d.Value.Values).ToList();
         ImGui.AlignTextToFramePadding();
-        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY());
         _uiSharedService.IconText(FontAwesomeIcon.Download);
         ImGui.SameLine();
 
@@ -821,18 +864,18 @@ public class CompactUi : WindowMediatorSubscriberBase
             var doneDownloads = currentDownloads.Sum(c => c.TransferredFiles);
             var totalDownloaded = currentDownloads.Sum(c => c.TransferredBytes);
             var totalToDownload = currentDownloads.Sum(c => c.TotalBytes);
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY());
             ImGui.TextUnformatted($"{doneDownloads}/{totalDownloads}");
             var downloadText =
                 $"({UiSharedService.ByteToString(totalDownloaded)}/{UiSharedService.ByteToString(totalToDownload)})";
             ImGui.SameLine();
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY());
             ImGui.TextUnformatted(downloadText);
         }
         else
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY());
             ImGui.TextUnformatted("N/A");
         }
     }

@@ -47,7 +47,6 @@ public class TopTabMenu
         None,
         Individual,
         Syncshell,
-        Filter,
         UserConfig
     }
 
@@ -68,11 +67,6 @@ public class TopTabMenu
     {
         get => _selectedTab; set
         {
-            if (_selectedTab == SelectedTab.Filter && value != SelectedTab.Filter)
-            {
-                Filter = string.Empty;
-            }
-
             _selectedTab = value;
         }
     }
@@ -126,23 +120,6 @@ public class TopTabMenu
         UiSharedService.AttachToolTip("Syncshell Menu");
 
         ImGui.SameLine();
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-        {
-            ImGui.BeginDisabled(!_apiController.AnyServerConnected);
-            var x = ImGui.GetCursorScreenPos();
-            if (ImGui.Button(FontAwesomeIcon.Filter.ToIconString(), buttonSize))
-            {
-                TabSelection = TabSelection == SelectedTab.Filter ? SelectedTab.None : SelectedTab.Filter;
-            }
-
-            ImGui.SameLine();
-            var xAfter = ImGui.GetCursorScreenPos();
-            if (TabSelection == SelectedTab.Filter)
-                drawList.AddLine(x with { Y = x.Y + buttonSize.Y + spacing.Y },
-                    xAfter with { Y = xAfter.Y + buttonSize.Y + spacing.Y, X = xAfter.X - spacing.X },
-                    underlineColor, 2);
-            ImGui.EndDisabled();
-        }
         UiSharedService.AttachToolTip("Filter");
 
         ImGui.SameLine();
@@ -178,10 +155,6 @@ public class TopTabMenu
             DrawSyncshellMenu(availableWidth, spacing.X);
             DrawGlobalSyncshellButtons(availableWidth, spacing.X);
         }
-        else if (TabSelection == SelectedTab.Filter)
-        {
-            DrawFilter(availableWidth, spacing.X);
-        }
         else if (TabSelection == SelectedTab.UserConfig)
         {
             DrawUserConfig(availableWidth, spacing.X);
@@ -213,7 +186,7 @@ public class TopTabMenu
         UiSharedService.AttachToolTip("Pair with " + (_pairToAdd.IsNullOrEmpty() ? "other user" : _pairToAdd));
     }
 
-    private void DrawFilter(float availableWidth, float spacingX)
+    public void DrawFilter(float availableWidth, float spacingX)
     {
         var buttonSize = _uiSharedService.GetIconTextButtonSize(FontAwesomeIcon.Ban, "Clear");
         ImGui.SetNextItemWidth(availableWidth - buttonSize - spacingX);
