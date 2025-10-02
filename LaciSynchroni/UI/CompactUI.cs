@@ -698,7 +698,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             if (unconvertedTextures > 0)
             {
                 UiSharedService.AttachToolTip(
-                    $"You have {unconvertedTextures} texture(s) that are not BCn format. Consider converting them to BC7 to reduce their size." +
+                    $"You have {unconvertedTextures} texture(s) that are not compressed format. Consider converting them to BC7 to reduce their size." +
                     UiSharedService.TooltipSeparator +
                     "Click to open the Character Data Analysis");
             }
