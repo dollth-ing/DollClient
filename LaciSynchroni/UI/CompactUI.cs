@@ -362,7 +362,6 @@ public class CompactUi : WindowMediatorSubscriberBase
                 ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
                 ImGui.SameLine(160);
             }
-
             
             using (ImRaii.PushId("uploads")) DrawUploads();
         }
@@ -380,6 +379,8 @@ public class CompactUi : WindowMediatorSubscriberBase
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(usersOnlineMessage);
             ImGui.SameLine(160);
+
+            
             using (ImRaii.PushId("downloads")) DrawDownloads();
         }
         else
@@ -760,6 +761,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var currentUploads = _fileTransferManager.CurrentUploads.ToList();
         ImGui.AlignTextToFramePadding();
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
         _uiSharedService.IconText(FontAwesomeIcon.Upload);
         ImGui.SameLine();
 
@@ -769,16 +771,18 @@ public class CompactUi : WindowMediatorSubscriberBase
             var doneUploads = currentUploads.Count(c => c.IsTransferred);
             var totalUploaded = currentUploads.Sum(c => c.Transferred);
             var totalToUpload = currentUploads.Sum(c => c.Total);
-
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
             ImGui.TextUnformatted($"{doneUploads}/{totalUploads}");
             var uploadText =
                 $"({UiSharedService.ByteToString(totalUploaded)}/{UiSharedService.ByteToString(totalToUpload)})";
             ImGui.SameLine();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
             ImGui.TextUnformatted(uploadText);
         }
         else
         {
             ImGui.AlignTextToFramePadding();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 9);
             ImGui.TextUnformatted("N/A");
         }
     }
@@ -787,6 +791,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var currentDownloads = _currentDownloads.SelectMany(d => d.Value.Values).ToList();
         ImGui.AlignTextToFramePadding();
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
         _uiSharedService.IconText(FontAwesomeIcon.Download);
         ImGui.SameLine();
 
@@ -796,16 +801,18 @@ public class CompactUi : WindowMediatorSubscriberBase
             var doneDownloads = currentDownloads.Sum(c => c.TransferredFiles);
             var totalDownloaded = currentDownloads.Sum(c => c.TransferredBytes);
             var totalToDownload = currentDownloads.Sum(c => c.TotalBytes);
-
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
             ImGui.TextUnformatted($"{doneDownloads}/{totalDownloads}");
             var downloadText =
                 $"({UiSharedService.ByteToString(totalDownloaded)}/{UiSharedService.ByteToString(totalToDownload)})";
             ImGui.SameLine();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
             ImGui.TextUnformatted(downloadText);
         }
         else
         {
             ImGui.AlignTextToFramePadding();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2);
             ImGui.TextUnformatted("N/A");
         }
     }
