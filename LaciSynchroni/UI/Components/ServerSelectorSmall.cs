@@ -13,12 +13,6 @@ namespace LaciSynchroni.UI.Components
 
         public void Draw(string[] availableServers, int[] connectedServers, float width)
         {
-            if (connectedServers.Length <= 0)
-            {
-                // This component should not be rendered without any connected servers! Doesn't make much sense!
-                return;
-            }
-            
             var selectedServer = availableServers[_currentServerIndex];
             ImGui.SetNextItemWidth(width);
             if (ImGui.BeginCombo("", selectedServer))

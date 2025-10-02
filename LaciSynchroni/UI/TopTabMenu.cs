@@ -40,14 +40,11 @@ public class TopTabMenu
         _pairTabServerSelector = new ServerSelectorSmall(index => _pairTabSelectedServer = index);
     }
 
-    public bool IsUserConfigTabSelected => TabSelection == SelectedTab.UserConfig;
-
     private enum SelectedTab
     {
         None,
         Individual,
         Syncshell,
-        UserConfig
     }
 
     public string Filter
@@ -74,7 +71,7 @@ public class TopTabMenu
     {
         var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
         var spacing = ImGui.GetStyle().ItemSpacing;
-        var buttonX = (availableWidth - (spacing.X * 3)) / 4f;
+        var buttonX = (availableWidth - (spacing.X * 3)) / 2;
         var buttonY = _uiSharedService.GetIconButtonSize(FontAwesomeIcon.Pause).Y;
         var buttonSize = new Vector2(buttonX, buttonY);
         var drawList = ImGui.GetWindowDrawList();
@@ -120,25 +117,6 @@ public class TopTabMenu
         UiSharedService.AttachToolTip("Syncshell Menu");
 
         ImGui.SameLine();
-        UiSharedService.AttachToolTip("Filter");
-
-        ImGui.SameLine();
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-        {
-            var x = ImGui.GetCursorScreenPos();
-            if (ImGui.Button(FontAwesomeIcon.UserCog.ToIconString(), buttonSize))
-            {
-                TabSelection = TabSelection == SelectedTab.UserConfig ? SelectedTab.None : SelectedTab.UserConfig;
-            }
-
-            ImGui.SameLine();
-            var xAfter = ImGui.GetCursorScreenPos();
-            if (TabSelection == SelectedTab.UserConfig)
-                drawList.AddLine(x with { Y = x.Y + buttonSize.Y + spacing.Y },
-                    xAfter with { Y = xAfter.Y + buttonSize.Y + spacing.Y, X = xAfter.X - spacing.X },
-                    underlineColor, 2);
-        }
-        UiSharedService.AttachToolTip("Your User Menu");
 
         ImGui.NewLine();
         btncolor.Dispose();
@@ -147,17 +125,12 @@ public class TopTabMenu
 
         if (TabSelection == SelectedTab.Individual)
         {
-            DrawAddPair(availableWidth, spacing.X);
             DrawGlobalIndividualButtons(availableWidth, spacing.X);
         }
         else if (TabSelection == SelectedTab.Syncshell)
         {
             DrawSyncshellMenu(availableWidth, spacing.X);
             DrawGlobalSyncshellButtons(availableWidth, spacing.X);
-        }
-        else if (TabSelection == SelectedTab.UserConfig)
-        {
-            DrawUserConfig(availableWidth, spacing.X);
         }
 
         if (TabSelection != SelectedTab.None) ImGuiHelpers.ScaledDummy(3f);
@@ -465,37 +438,6 @@ public class TopTabMenu
         {
             _syncMediator.Publish(new UiToggleMessage(typeof(JoinSyncshellUI)));
         }
-    }
-
-    private void DrawUserConfig(float availableWidth, float spacingX)
-    {
-        var buttonX = (availableWidth - spacingX) / 2f;
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.PersonCircleQuestion, "Chara Data Analysis", buttonX))
-        {
-            _syncMediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
-        }
-        UiSharedService.AttachToolTip("View and analyze your generated character data");
-
-        ImGui.SameLine();
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Running, "Character Data Hub", availableWidth))
-        {
-            _syncMediator.Publish(new UiToggleMessage(typeof(CharaDataHubUi)));
-        }
-
-        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserCircle, "Edit Profile", buttonX))
-        {
-            _syncMediator.Publish(new UiToggleMessage(typeof(EditProfileUi)));
-        }
-        UiSharedService.AttachToolTip("Edit your Laci Synchroni Profile");
-        ImGui.EndDisabled();
-
-        ImGui.SameLine();
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Satellite, "Connected Servers", availableWidth))
-        {
-            _syncMediator.Publish(new ToggleServerSelectMessage());
-        }
-        UiSharedService.AttachToolTip("Toggle the server connections list");
     }
 
     private async Task GlobalControlCountdown(int countdown)

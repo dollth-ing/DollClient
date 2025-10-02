@@ -64,7 +64,8 @@ public class CompactUi : WindowMediatorSubscriberBase
     private bool _showMultiServerSelect;
     private readonly ServerConfigurationManager _serverConfigurationManager;
     private readonly ServerSelectorSmall _pairTabServerSelector;
-    private int _pairTabSelectedServer = 0;
+    private int _pairTabSelectedServer;
+    private string _pairToAdd = string.Empty;
 
     public CompactUi(ILogger<CompactUi> logger, UiSharedService uiShared, SyncConfigService configService,
         ApiController apiController, PairManager pairManager,
@@ -170,9 +171,9 @@ public class CompactUi : WindowMediatorSubscriberBase
             MinimumSize = new Vector2(375, 420), MaximumSize = new Vector2(600, 2000),
         };
     }
+
     protected override void DrawInternal()
     {
-
         _windowContentWidth = UiSharedService.GetWindowContentRegionWidth();
 
         if (!_ipcManager.Initialized)
@@ -213,30 +214,25 @@ public class CompactUi : WindowMediatorSubscriberBase
         DrawMultiServerSection();
 
         using (ImRaii.PushId("serverstatus")) DrawServerStatus();
-        
+
         ImGui.Separator();
-        
+
         if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
         {
             using (ImRaii.PushId("modload")) DrawModLoad();
         }
 
         using (ImRaii.PushId("topmenu2")) ServerSelection();
+
         using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
 
         ImGui.BeginDisabled(!_apiController.AnyServerConnected);
 
-        if (!_tabMenu.IsUserConfigTabSelected)
-        {
-            using (ImRaii.PushId("pairlist")) DrawPairs();
-            ImGui.Separator();
-            using (ImRaii.PushId("filter")) _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X, ImGui.GetStyle().ItemSpacing.X);
-        }
-        else
-        {
-            using (ImRaii.PushId("pairlist")) DrawEmptyPairs();
-            ImGui.Separator();
-        }
+        using (ImRaii.PushId("pairlist")) DrawPairs();
+        ImGui.Separator();
+        using (ImRaii.PushId("filter"))
+            _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X,
+                ImGui.GetStyle().ItemSpacing.X);
 
         float pairlistEnd = ImGui.GetCursorPosY();
         _transferPartHeight = ImGui.GetCursorPosY() - pairlistEnd - ImGui.GetTextLineHeight();
@@ -398,33 +394,37 @@ public class CompactUi : WindowMediatorSubscriberBase
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(ImGuiColors.DalamudRed, notConnectedMessage);
         }
-        
+
         ImGui.Spacing();
         ImGui.Spacing();
-        
+
         var spacing = ImGui.GetStyle().ItemSpacing;
         var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
-        
+
         var buttonX = (availableWidth - spacing.X - 8) / 3f;
         if (_uiSharedService.IconTextButton(FontAwesomeIcon.Cog, "Settings", buttonX))
         {
             Mediator.Publish(new UiToggleMessage(typeof(SettingsUi)));
         }
+
         UiSharedService.AttachToolTip("Open Laci Synchroni settings");
         ImGui.SameLine();
         if (_uiSharedService.IconTextButton(FontAwesomeIcon.Running, "Data Hub", buttonX))
         {
             _syncMediator.Publish(new UiToggleMessage(typeof(CharaDataHubUi)));
         }
+
         UiSharedService.AttachToolTip("Open the character data hub");
         ImGui.SameLine();
         if (_uiSharedService.IconTextButton(FontAwesomeIcon.Satellite, "Service List", buttonX))
         {
             _syncMediator.Publish(new ToggleServerSelectMessage());
         }
+
         UiSharedService.AttachToolTip("Toggle the server connections list");
+        ImGui.Spacing();
     }
-    
+
     private void ToggleMultiServerSelect()
     {
         _showMultiServerSelect = !_showMultiServerSelect;
@@ -609,7 +609,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             _ => "Offline"
         };
     }
-    
+
     private void DrawModLoad()
     {
         CheckForCharacterAnalysis();
@@ -620,6 +620,8 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
         var config = _playerPerformanceConfigService.Current;
+
+        ImGui.Spacing();
 
         var playerLoadMemory = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.OriginalSize));
         var playerLoadTriangles = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.Triangles));
@@ -645,7 +647,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
         ImGui.PopStyleColor();
-        
+
         if (config.VRAMSizeAutoPauseThresholdMiB > 0)
         {
             var _playerLoadMemoryKiB = playerLoadMemory / 1024;
@@ -707,43 +709,61 @@ public class CompactUi : WindowMediatorSubscriberBase
             }
         }
 
+        ImGui.Spacing();
         ImGui.Separator();
     }
 
     private void ServerSelection()
     {
-        
-        _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes, ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 100);
-        UiSharedService.AttachToolTip("Server to use for pair actions");
-            
-        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        ImGui.Spacing();
+
+        _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes,
+            ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 98);
+        UiSharedService.AttachToolTip("Server to use for quick actions");
+
         ImGui.SameLine();
         if (_uiSharedService.IconButton(FontAwesomeIcon.UserCircle, "Edit Profile"))
         {
             _syncMediator.Publish(new UiToggleMessage(typeof(EditProfileUi)));
         }
+
         UiSharedService.AttachToolTip("Edit your Service Profiles");
-        ImGui.EndDisabled();
-        
-        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+
         ImGui.SameLine();
         if (_uiSharedService.IconButton(FontAwesomeIcon.Clone, "Copy"))
         {
             ImGui.SetClipboardText(_apiController.GetDisplayNameByServer(_pairTabSelectedServer));
         }
+
         UiSharedService.AttachToolTip("Copy ID");
-        ImGui.EndDisabled();
-        
-        ImGui.BeginDisabled(!_apiController.IsServerConnected(_pairTabSelectedServer));
+
         ImGui.SameLine();
-        if (_uiSharedService.IconButton(FontAwesomeIcon.Clone, "Copy"))
+        DrawMultiServerConnectButton(_pairTabSelectedServer,
+            _serverConfigurationManager.GetServerNameByIndex(_pairTabSelectedServer));
+
+        var buttonSize = _uiSharedService.GetIconTextButtonSize(FontAwesomeIcon.UserPlus, "Add");
+        ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - buttonSize -
+                               ImGui.GetStyle().ItemSpacing.X);
+        ImGui.InputTextWithHint("##otheruid", "Other players UID/Alias", ref _pairToAdd, 20);
+        ImGui.SameLine();
+        var alreadyExisting = _pairManager.DirectPairs.Exists(p =>
+            string.Equals(p.UserData.UID, _pairToAdd, StringComparison.Ordinal) ||
+            string.Equals(p.UserData.Alias, _pairToAdd, StringComparison.Ordinal));
+        using (ImRaii.Disabled(alreadyExisting || string.IsNullOrEmpty(_pairToAdd)))
         {
-            ImGui.SetClipboardText(_apiController.GetDisplayNameByServer(_pairTabSelectedServer));
+            if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserPlus, "Add"))
+            {
+                // Adds pair for the current
+                _ = _apiController.UserAddPairToServer(_pairTabSelectedServer, _pairToAdd);
+                _pairToAdd = string.Empty;
+            }
         }
-        UiSharedService.AttachToolTip("Copy ID");
-        ImGui.EndDisabled();
+        UiSharedService.AttachToolTip("Pair with " + (_pairToAdd.IsNullOrEmpty() ? "other user" : _pairToAdd));
+        
+        ImGui.Spacing();
+        ImGui.Separator();
     }
-    
+
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)
     {
         float width = (ImGui.GetWindowWidth() - 54);
