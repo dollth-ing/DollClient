@@ -211,6 +211,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         DrawMultiServerSection();
 
         using (ImRaii.PushId("serverstatus")) DrawServerStatus();
+        
         ImGui.Separator();
 
         if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
@@ -234,7 +235,6 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
         float pairlistEnd = ImGui.GetCursorPosY();
-        using (ImRaii.PushId("transfers")) DrawTransfers();
         _transferPartHeight = ImGui.GetCursorPosY() - pairlistEnd - ImGui.GetTextLineHeight();
         using (ImRaii.PushId("group-user-popup")) _selectPairsForGroupUi.Draw(_pairManager.DirectPairs);
         using (ImRaii.PushId("grouping-popup")) _selectGroupForPairUi.Draw();
@@ -318,10 +318,19 @@ public class CompactUi : WindowMediatorSubscriberBase
             rectMin = new Vector2(ImGui.GetWindowContentRegionMin().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
             using (_uiSharedService.UidFont.Push())
             {
-                var onlineText = _apiController.AnyServerConnected ? "Online" : "Offline";
-                var origTextSize = ImGui.CalcTextSize(onlineText);
-                ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (origTextSize.X / 2));
-                ImGui.TextColored(_apiController.AnyServerConnected ? ImGuiColors.ParsedGreen : ImGuiColors.DalamudRed, onlineText);
+                if (_apiController.AnyServerConnected)
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.ParsedGreen);
+                    ImGui.Text(_apiController.ConnectedServerIndexes.Length + "/" + _apiController.EnabledServerIndexes.Length + " Online");
+                }
+
+                if (!_apiController.AnyServerConnected)
+                {
+                    ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudRed);
+                    ImGui.Text("Offline");
+                }
+                
+                ImGui.PopStyleColor();
             }
         }
         else
@@ -336,16 +345,15 @@ public class CompactUi : WindowMediatorSubscriberBase
             var usersOnlineMessage = "Users Online";
 
             var userCount = _apiController.OnlineUsers.ToString(CultureInfo.InvariantCulture);
-            var userSize = ImGui.CalcTextSize(userCount);
-            var textSize = ImGui.CalcTextSize(usersOnlineMessage);
-
-            ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMin().X + UiSharedService.GetWindowContentRegionWidth()) / 2 - (userSize.X + textSize.X) / 2 - ImGui.GetStyle().ItemSpacing.X / 2);
+            
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(ImGuiColors.ParsedGreen, userCount);
 
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(usersOnlineMessage);
+            
+            using (ImRaii.PushId("transfers")) DrawTransfers();
         }
         else
         {
@@ -682,7 +690,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.SameLine();
         ImGui.TextUnformatted($"{playerLoadTriangles}");
         
-        ImGui.SameLine(ImGui.GetWindowWidth() - 28);
+        ImGui.SameLine(ImGui.GetWindowWidth() - 27);
         ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
         _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
         if (ImGui.IsItemHovered())
@@ -737,13 +745,14 @@ public class CompactUi : WindowMediatorSubscriberBase
         else
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted("No uploads in progress");
+            ImGui.TextUnformatted("N/A");
         }
 
         var currentDownloads = _currentDownloads.SelectMany(d => d.Value.Values).ToList();
         ImGui.AlignTextToFramePadding();
+        ImGui.SameLine();
         _uiSharedService.IconText(FontAwesomeIcon.Download);
-        ImGui.SameLine(35 * ImGuiHelpers.GlobalScale);
+        ImGui.SameLine();
 
         if (currentDownloads.Any())
         {
@@ -763,7 +772,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         else
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted("No downloads in progress");
+            ImGui.TextUnformatted("N/A");
         }
     }
 
