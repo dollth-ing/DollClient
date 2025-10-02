@@ -337,16 +337,18 @@ public class CompactUi : WindowMediatorSubscriberBase
         if (_apiController.ConnectedServerIndexes.Length >= 1)
         {
             var onlineMessage = "Loading";
+            var currentDisplayName = "Loading";
             
             using (_uiSharedService.UidFont.Push())
             {
-                if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length == 1)
+                if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1)
                 {
                     onlineMessage =
                         _apiController.GetDisplayNameByServer(_apiController.ConnectedServerIndexes.FirstOrDefault());
+                    currentDisplayName = onlineMessage;
                 }
 
-                if (_apiController.AnyServerConnected & _apiController.ConnectedServerIndexes.Length > 1)
+                if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length > 1)
                 {
                     onlineMessage = _apiController.ConnectedServerIndexes.Length + "/" +
                                     _apiController.EnabledServerIndexes.Length + " Online";
@@ -361,6 +363,24 @@ public class CompactUi : WindowMediatorSubscriberBase
                 ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
                 ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
                 ImGui.SameLine(160);
+            }
+            
+            if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1 )
+            {
+                if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
+                {
+                    ImGui.SetClipboardText(currentDisplayName);
+                }
+                UiSharedService.AttachToolTip("Click to copy");
+            }
+
+            else
+            {
+                if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
+                {
+                    ToggleMultiServerSelect();
+                }
+                UiSharedService.AttachToolTip("Open Service List");
             }
             
             using (ImRaii.PushId("uploads")) DrawUploads();
