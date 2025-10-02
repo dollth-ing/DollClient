@@ -62,6 +62,9 @@ public class CompactUi : WindowMediatorSubscriberBase
     private bool _wasOpen;
     private float _windowContentWidth;
     private bool _showMultiServerSelect;
+    private readonly ServerConfigurationManager _serverConfigurationManager;
+    private readonly ServerSelectorSmall _pairTabServerSelector;
+    private int _pairTabSelectedServer = 0;
 
     public CompactUi(ILogger<CompactUi> logger, UiSharedService uiShared, SyncConfigService configService,
         ApiController apiController, PairManager pairManager,
@@ -70,7 +73,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         SelectPairForTagUi selectPairForTagUi,
         PerformanceCollectorService performanceCollectorService, IpcManager ipcManager,
         CharacterAnalyzer characterAnalyzer, PlayerPerformanceConfigService playerPerformanceConfigService,
-        SyncMediator syncMediator)
+        SyncMediator syncMediator, ServerConfigurationManager serverConfigurationManager)
         : base(logger, mediator, "###LaciSynchroniMainUI", performanceCollectorService)
     {
         _uiSharedService = uiShared;
@@ -87,7 +90,9 @@ public class CompactUi : WindowMediatorSubscriberBase
         _characterAnalyzer = characterAnalyzer;
         _syncMediator = syncMediator;
         _playerPerformanceConfigService = playerPerformanceConfigService;
+        _serverConfigurationManager = serverConfigurationManager;
         _tabMenu = new TopTabMenu(Mediator, _apiController, _pairManager, _uiSharedService, _serverConfigManager);
+        _pairTabServerSelector = new ServerSelectorSmall(index => _pairTabSelectedServer = index);
 
         CheckForCharacterAnalysis();
 
@@ -216,6 +221,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             using (ImRaii.PushId("modload")) DrawModLoad();
         }
 
+        using (ImRaii.PushId("topmenu2")) ServerSelection();
         using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
 
         ImGui.BeginDisabled(!_apiController.AnyServerConnected);
@@ -402,7 +408,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         var buttonX = (availableWidth - spacing.X - 8) / 3f;
         if (_uiSharedService.IconTextButton(FontAwesomeIcon.Cog, "Settings", buttonX))
         {
-            _syncMediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
+            Mediator.Publish(new UiToggleMessage(typeof(SettingsUi)));
         }
         UiSharedService.AttachToolTip("Open Laci Synchroni settings");
         ImGui.SameLine();
@@ -704,6 +710,40 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.Separator();
     }
 
+    private void ServerSelection()
+    {
+        
+        _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes, ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 100);
+        UiSharedService.AttachToolTip("Server to use for pair actions");
+            
+        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        ImGui.SameLine();
+        if (_uiSharedService.IconButton(FontAwesomeIcon.UserCircle, "Edit Profile"))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(EditProfileUi)));
+        }
+        UiSharedService.AttachToolTip("Edit your Service Profiles");
+        ImGui.EndDisabled();
+        
+        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        ImGui.SameLine();
+        if (_uiSharedService.IconButton(FontAwesomeIcon.Clone, "Copy"))
+        {
+            ImGui.SetClipboardText(_apiController.GetDisplayNameByServer(_pairTabSelectedServer));
+        }
+        UiSharedService.AttachToolTip("Copy ID");
+        ImGui.EndDisabled();
+        
+        ImGui.BeginDisabled(!_apiController.IsServerConnected(_pairTabSelectedServer));
+        ImGui.SameLine();
+        if (_uiSharedService.IconButton(FontAwesomeIcon.Clone, "Copy"))
+        {
+            ImGui.SetClipboardText(_apiController.GetDisplayNameByServer(_pairTabSelectedServer));
+        }
+        UiSharedService.AttachToolTip("Copy ID");
+        ImGui.EndDisabled();
+    }
+    
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)
     {
         float width = (ImGui.GetWindowWidth() - 54);

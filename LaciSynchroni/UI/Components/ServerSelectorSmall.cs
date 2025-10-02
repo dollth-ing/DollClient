@@ -18,11 +18,6 @@ namespace LaciSynchroni.UI.Components
                 // This component should not be rendered without any connected servers! Doesn't make much sense!
                 return;
             }
-            // Check if the current server is actually selectable, if not, swap to the first connected we find
-            if (!connectedServers.Contains(_currentServerIndex))
-            {
-                ChangeSelectedIndex(connectedServers[0]);
-            }
             
             var selectedServer = availableServers[_currentServerIndex];
             ImGui.SetNextItemWidth(width);
@@ -33,7 +28,7 @@ namespace LaciSynchroni.UI.Components
                     var serverName = availableServers[i];
                     var isSelected = _currentServerIndex == i;
                     var isConnected = connectedServers.Contains(i);
-                    if (ImGui.Selectable(serverName, isSelected, isConnected ? ImGuiSelectableFlags.None : ImGuiSelectableFlags.Disabled))
+                    if (ImGui.Selectable(serverName, isSelected))
                     {
                         ChangeSelectedIndex(i);
                     }
