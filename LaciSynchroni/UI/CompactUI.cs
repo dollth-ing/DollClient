@@ -2,7 +2,6 @@
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
-using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
 using LaciSynchroni.Common.Data.Extensions;
@@ -34,8 +33,12 @@ public class CompactUi : WindowMediatorSubscriberBase
 {
     private readonly ApiController _apiController;
     private readonly SyncConfigService _configService;
-    private readonly ConcurrentDictionary<GameObjectHandler, Dictionary<string, FileDownloadStatus>> _currentDownloads = new();
+
+    private readonly ConcurrentDictionary<GameObjectHandler, Dictionary<string, FileDownloadStatus>> _currentDownloads =
+        new();
+
     private readonly DrawEntityFactory _drawEntityFactory;
+    private readonly SyncMediator _syncMediator;
     private readonly FileUploadManager _fileTransferManager;
     private readonly PairManager _pairManager;
     private readonly SelectTagForPairUi _selectGroupForPairUi;
@@ -47,25 +50,31 @@ public class CompactUi : WindowMediatorSubscriberBase
     private readonly UiSharedService _uiSharedService;
     private readonly CharacterAnalyzer _characterAnalyzer;
     private readonly PlayerPerformanceConfigService _playerPerformanceConfigService;
-    private readonly ServerConfigService _serverConfigService;
     private Dictionary<ObjectKind, Dictionary<string, CharacterAnalyzer.FileDataEntry>>? _cachedAnalysis;
-    private bool _hasUpdate = false;
+    private bool _hasUpdate;
     private List<IDrawFolder> _drawFolders;
     private Pair? _lastAddedUser;
     private string _lastAddedUserComment = string.Empty;
     private Vector2 _lastPosition = Vector2.One;
     private Vector2 _lastSize = Vector2.One;
-    private int _secretKeyIdx = -1;
     private bool _showModalForUserAddition;
     private float _transferPartHeight;
     private bool _wasOpen;
     private float _windowContentWidth;
-    private bool _showMultiServerSelect = false;
+    private bool _showMultiServerSelect;
+    private readonly ServerConfigurationManager _serverConfigurationManager;
+    private readonly ServerSelectorSmall _pairTabServerSelector;
+    private int _pairTabSelectedServer;
+    private string _pairToAdd = string.Empty;
 
-    public CompactUi(ILogger<CompactUi> logger, UiSharedService uiShared, SyncConfigService configService, ApiController apiController, PairManager pairManager,
+    public CompactUi(ILogger<CompactUi> logger, UiSharedService uiShared, SyncConfigService configService,
+        ApiController apiController, PairManager pairManager,
         ServerConfigurationManager serverConfigManager, SyncMediator mediator, FileUploadManager fileTransferManager,
-        TagHandler tagHandler, DrawEntityFactory drawEntityFactory, SelectTagForPairUi selectTagForPairUi, SelectPairForTagUi selectPairForTagUi,
-        PerformanceCollectorService performanceCollectorService, IpcManager ipcManager, CharacterAnalyzer characterAnalyzer, PlayerPerformanceConfigService playerPerformanceConfigService, ServerConfigService serverConfigService)
+        TagHandler tagHandler, DrawEntityFactory drawEntityFactory, SelectTagForPairUi selectTagForPairUi,
+        SelectPairForTagUi selectPairForTagUi,
+        PerformanceCollectorService performanceCollectorService, IpcManager ipcManager,
+        CharacterAnalyzer characterAnalyzer, PlayerPerformanceConfigService playerPerformanceConfigService,
+        SyncMediator syncMediator, ServerConfigurationManager serverConfigurationManager)
         : base(logger, mediator, "###LaciSynchroniMainUI", performanceCollectorService)
     {
         _uiSharedService = uiShared;
@@ -80,9 +89,11 @@ public class CompactUi : WindowMediatorSubscriberBase
         _selectPairsForGroupUi = selectPairForTagUi;
         _ipcManager = ipcManager;
         _characterAnalyzer = characterAnalyzer;
+        _syncMediator = syncMediator;
         _playerPerformanceConfigService = playerPerformanceConfigService;
-        _serverConfigService = serverConfigService;
+        _serverConfigurationManager = serverConfigurationManager;
         _tabMenu = new TopTabMenu(Mediator, _apiController, _pairManager, _uiSharedService, _serverConfigManager);
+        _pairTabServerSelector = new ServerSelectorSmall(index => _pairTabSelectedServer = index);
 
         CheckForCharacterAnalysis();
 
@@ -102,7 +113,7 @@ public class CompactUi : WindowMediatorSubscriberBase
                 {
                     Mediator.Publish(new UiToggleMessage(typeof(SettingsUi)));
                 },
-                IconOffset = new(2,1),
+                IconOffset = new(2, 1),
                 ShowTooltip = () =>
                 {
                     ImGui.BeginTooltip();
@@ -117,7 +128,7 @@ public class CompactUi : WindowMediatorSubscriberBase
                 {
                     Mediator.Publish(new UiToggleMessage(typeof(EventViewerUI)));
                 },
-                IconOffset = new(2,1),
+                IconOffset = new(2, 1),
                 ShowTooltip = () =>
                 {
                     ImGui.BeginTooltip();
@@ -129,7 +140,8 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         _drawFolders = GetDrawFolders().ToList();
         var ver = Assembly.GetExecutingAssembly().GetName().Version!;
-        var versionString = string.Create(CultureInfo.InvariantCulture, $"{ver.Major}.{ver.Minor}.{ver.Build}.{ver.Revision}");
+        var versionString = string.Create(CultureInfo.InvariantCulture,
+            $"{ver.Major}.{ver.Minor}.{ver.Build}.{ver.Revision}");
         var sb = new StringBuilder().Append("Laci Synchroni ");
 
 #if DEBUG
@@ -147,7 +159,8 @@ public class CompactUi : WindowMediatorSubscriberBase
         Mediator.Subscribe<ToggleServerSelectMessage>(this, (_) => ToggleMultiServerSelect());
         Mediator.Subscribe<CutsceneStartMessage>(this, (_) => UiSharedService_GposeStart());
         Mediator.Subscribe<CutsceneEndMessage>(this, (_) => UiSharedService_GposeEnd());
-        Mediator.Subscribe<DownloadStartedMessage>(this, (msg) => _currentDownloads[msg.DownloadId] = msg.DownloadStatus);
+        Mediator.Subscribe<DownloadStartedMessage>(this,
+            (msg) => _currentDownloads[msg.DownloadId] = msg.DownloadStatus);
         Mediator.Subscribe<DownloadFinishedMessage>(this, (msg) => _currentDownloads.TryRemove(msg.DownloadId, out _));
         Mediator.Subscribe<RefreshUiMessage>(this, (msg) => _drawFolders = GetDrawFolders().ToList());
 
@@ -155,29 +168,13 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         SizeConstraints = new WindowSizeConstraints()
         {
-            MinimumSize = new Vector2(375, 420),
-            MaximumSize = new Vector2(600, 2000),
+            MinimumSize = new Vector2(375, 420), MaximumSize = new Vector2(600, 2000),
         };
     }
 
     protected override void DrawInternal()
     {
         _windowContentWidth = UiSharedService.GetWindowContentRegionWidth();
-        // if (!_apiController.IsCurrentVersion)
-        // {
-        //     var ver = _apiController.CurrentClientVersion;
-        //     var versionString = string.Create(CultureInfo.InvariantCulture, $"{ver.Major}.{ver.Minor}.{ver.Build}.{ver.Revision}");
-        //     var unsupported = "UNSUPPORTED VERSION";
-        //     using (_uiSharedService.UidFont.Push())
-        //     {
-        //         var uidTextSize = ImGui.CalcTextSize(unsupported);
-        //         ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X + ImGui.GetWindowContentRegionMin().X) / 2 - uidTextSize.X / 2);
-        //         ImGui.AlignTextToFramePadding();
-        //         ImGui.TextColored(ImGuiColors.DalamudRed, unsupported);
-        //     }
-        //     UiSharedService.ColorTextWrapped($"Your Laci Synchroni installation is out of date, the current version is {versionString}. " +
-        //         $"It is highly recommended to keep Laci Synchroni up to date. Open /xlplugins and update the plugin.", ImGuiColors.DalamudRed);
-        // }
 
         if (!_ipcManager.Initialized)
         {
@@ -186,31 +183,38 @@ public class CompactUi : WindowMediatorSubscriberBase
             using (_uiSharedService.UidFont.Push())
             {
                 var uidTextSize = ImGui.CalcTextSize(unsupported);
-                ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X + ImGui.GetWindowContentRegionMin().X) / 2 - uidTextSize.X / 2);
+                ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X + ImGui.GetWindowContentRegionMin().X) / 2 -
+                                    uidTextSize.X / 2);
                 ImGui.AlignTextToFramePadding();
                 ImGui.TextColored(ImGuiColors.DalamudRed, unsupported);
             }
+
             var penumAvailable = _ipcManager.Penumbra.APIAvailable;
             var glamAvailable = _ipcManager.Glamourer.APIAvailable;
 
-            UiSharedService.ColorTextWrapped($"One or more Plugins essential for Laci Synchroni operation are unavailable. Enable or update following plugins:", ImGuiColors.DalamudRed);
+            UiSharedService.ColorTextWrapped(
+                $"One or more Plugins essential for Laci Synchroni operation are unavailable. Enable or update following plugins:",
+                ImGuiColors.DalamudRed);
             using var indent = ImRaii.PushIndent(10f);
             if (!penumAvailable)
             {
                 UiSharedService.TextWrapped("Penumbra");
-                _uiSharedService.BooleanToColoredIcon(penumAvailable, true);
+                _uiSharedService.BooleanToColoredIcon(penumAvailable);
             }
+
             if (!glamAvailable)
             {
                 UiSharedService.TextWrapped("Glamourer");
-                _uiSharedService.BooleanToColoredIcon(glamAvailable, true);
+                _uiSharedService.BooleanToColoredIcon(glamAvailable);
             }
+
             ImGui.Separator();
         }
 
         DrawMultiServerSection();
 
         using (ImRaii.PushId("serverstatus")) DrawServerStatus();
+
         ImGui.Separator();
 
         if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
@@ -218,23 +222,19 @@ public class CompactUi : WindowMediatorSubscriberBase
             using (ImRaii.PushId("modload")) DrawModLoad();
         }
 
+        using (ImRaii.PushId("topmenu2")) ServerSelection();
+
         using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
 
         ImGui.BeginDisabled(!_apiController.AnyServerConnected);
 
-        if (!_tabMenu.IsUserConfigTabSelected)
-        {
-            using (ImRaii.PushId("pairlist")) DrawPairs();
-            ImGui.Separator();
-        }
-        else
-        {
-            using (ImRaii.PushId("pairlist")) DrawEmptyPairs();
-            ImGui.Separator();
-        }
+        using (ImRaii.PushId("pairlist")) DrawPairs();
+        ImGui.Separator();
+        using (ImRaii.PushId("filter"))
+            _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X,
+                ImGui.GetStyle().ItemSpacing.X);
 
         float pairlistEnd = ImGui.GetCursorPosY();
-        using (ImRaii.PushId("transfers")) DrawTransfers();
         _transferPartHeight = ImGui.GetCursorPosY() - pairlistEnd - ImGui.GetTextLineHeight();
         using (ImRaii.PushId("group-user-popup")) _selectPairsForGroupUi.Draw(_pairManager.DirectPairs);
         using (ImRaii.PushId("grouping-popup")) _selectGroupForPairUi.Draw();
@@ -249,7 +249,8 @@ public class CompactUi : WindowMediatorSubscriberBase
             _lastAddedUserComment = string.Empty;
         }
 
-        if (ImGui.BeginPopupModal("Set Notes for New User", ref _showModalForUserAddition, UiSharedService.PopupWindowFlags))
+        if (ImGui.BeginPopupModal("Set Notes for New User", ref _showModalForUserAddition,
+                UiSharedService.PopupWindowFlags))
         {
             if (_lastAddedUser == null)
             {
@@ -257,16 +258,20 @@ public class CompactUi : WindowMediatorSubscriberBase
             }
             else
             {
-                UiSharedService.TextWrapped($"You have successfully added {_lastAddedUser.UserData.AliasOrUID}. Set a local note for the user in the field below:");
-                ImGui.InputTextWithHint("##noteforuser", $"Note for {_lastAddedUser.UserData.AliasOrUID}", ref _lastAddedUserComment, 100);
+                UiSharedService.TextWrapped(
+                    $"You have successfully added {_lastAddedUser.UserData.AliasOrUID}. Set a local note for the user in the field below:");
+                ImGui.InputTextWithHint("##noteforuser", $"Note for {_lastAddedUser.UserData.AliasOrUID}",
+                    ref _lastAddedUserComment, 100);
                 if (_uiSharedService.IconTextButton(FontAwesomeIcon.Save, "Save Note"))
                 {
-                    _serverConfigManager.SetNoteForUid(_lastAddedUser.ServerIndex, _lastAddedUser.UserData.UID, _lastAddedUserComment);
+                    _serverConfigManager.SetNoteForUid(_lastAddedUser.ServerIndex, _lastAddedUser.UserData.UID,
+                        _lastAddedUserComment);
                     _lastAddedUser = null;
                     _lastAddedUserComment = string.Empty;
                     _showModalForUserAddition = false;
                 }
             }
+
             UiSharedService.SetScaledWindowSize(275);
             ImGui.EndPopup();
         }
@@ -281,23 +286,13 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
     }
 
-    private void DrawEmptyPairs()
-    {
-        var ySize = _transferPartHeight == 0
-            ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y
-                + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) - _transferPartHeight - ImGui.GetCursorPosY();
-
-        ImGui.BeginChild("list", new Vector2(_windowContentWidth, ySize), border: false);
-        ImGui.EndChild();
-    }
-
     private void DrawPairs()
     {
         var ySize = _transferPartHeight == 0
             ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y
-                + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) - _transferPartHeight - ImGui.GetCursorPosY();
+            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 24
+                  + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) -
+              _transferPartHeight - ImGui.GetCursorPosY();
 
         ImGui.BeginChild("list", new Vector2(_windowContentWidth, ySize), border: false);
 
@@ -311,112 +306,111 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private void DrawServerStatus()
     {
-        Vector2 rectMin;
-
-        if (_apiController.ConnectedServerIndexes.Length > 1)
+        if (_apiController.ConnectedServerIndexes.Length >= 1)
         {
-            rectMin = new Vector2(ImGui.GetWindowContentRegionMin().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
+            var onlineMessage = "Loading";
+            var currentDisplayName = "Loading";
+
             using (_uiSharedService.UidFont.Push())
             {
-                var onlineText = _apiController.AnyServerConnected ? "Online" : "Offline";
-                var origTextSize = ImGui.CalcTextSize(onlineText);
-                ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (origTextSize.X / 2));
-                ImGui.TextColored(_apiController.AnyServerConnected ? ImGuiColors.ParsedGreen : ImGuiColors.DalamudRed, onlineText);
+                if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1)
+                {
+                    onlineMessage =
+                        _apiController.GetDisplayNameByServer(_apiController.ConnectedServerIndexes.FirstOrDefault());
+                    currentDisplayName = onlineMessage;
+                }
+
+                if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length > 1)
+                {
+                    onlineMessage = _apiController.ConnectedServerIndexes.Length + "/" +
+                                    _apiController.EnabledServerIndexes.Length + " Online";
+                }
+
+                if (!_apiController.AnyServerConnected)
+                {
+                    onlineMessage = "Offline";
+                }
+
+                ImGui.AlignTextToFramePadding();
+                ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
+                ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
+                ImGui.SameLine(160);
             }
-        }
-        else
-        {
-            using (ImRaii.PushId("singleserveruid")) DrawUIDHeader(_apiController.ConnectedServerIndexes.FirstOrDefault());
-            ImGui.Separator();
-            rectMin = new Vector2(ImGui.GetWindowContentRegionMin().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
+
+            if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1)
+            {
+                if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
+                {
+                    ImGui.SetClipboardText(currentDisplayName);
+                }
+
+                UiSharedService.AttachToolTip("Click to copy");
+            }
+
+            else
+            {
+                if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
+                {
+                    ToggleMultiServerSelect();
+                }
+
+                UiSharedService.AttachToolTip("Open Service List");
+            }
+
+            using (ImRaii.PushId("uploads")) DrawUploads();
         }
 
         if (_apiController.AnyServerConnected)
         {
             var usersOnlineMessage = "Users Online";
-
             var userCount = _apiController.OnlineUsers.ToString(CultureInfo.InvariantCulture);
-            var userSize = ImGui.CalcTextSize(userCount);
-            var textSize = ImGui.CalcTextSize(usersOnlineMessage);
 
-            ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMin().X + UiSharedService.GetWindowContentRegionWidth()) / 2 - (userSize.X + textSize.X) / 2 - ImGui.GetStyle().ItemSpacing.X / 2);
             ImGui.AlignTextToFramePadding();
+            ImGui.SetCursorPosX((150 - ImGui.CalcTextSize(usersOnlineMessage + userCount).X) / 2);
             ImGui.TextColored(ImGuiColors.ParsedGreen, userCount);
-
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(usersOnlineMessage);
+            ImGui.SameLine(160);
+
+
+            using (ImRaii.PushId("downloads")) DrawDownloads();
         }
         else
         {
             var notConnectedMessage = "Not connected to any server";
-
-            ImGui.SetCursorPosX(ImGui.GetWindowContentRegionMin().X + UiSharedService.GetWindowContentRegionWidth() / 2 - ImGui.CalcTextSize(notConnectedMessage).X / 2);
             ImGui.AlignTextToFramePadding();
             ImGui.TextColored(ImGuiColors.DalamudRed, notConnectedMessage);
         }
 
-        var rectMax = new Vector2(ImGui.GetWindowContentRegionMax().X, ImGui.GetCursorPosY()) + ImGui.GetWindowPos();
+        ImGui.Spacing();
+        ImGui.Spacing();
 
-        DrawServerStatusTooltipAndToggle(rectMin, rectMax);
-    }
+        var spacing = ImGui.GetStyle().ItemSpacing;
+        var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
 
-    private void DrawUIDHeader(int serverId)
-    {
-        var uidText = GetUidTextMultiServer(serverId);
-        var uidColor = GetUidColorByServer(serverId);
-
-        using (_uiSharedService.UidFont.Push())
+        var buttonX = (availableWidth - spacing.X - 8) / 3f;
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Cog, "Settings", buttonX))
         {
-            var uidTextSize = ImGui.CalcTextSize(uidText);
-            ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (uidTextSize.X / 2));
-            ImGui.TextColored(uidColor, uidText);
+            Mediator.Publish(new UiToggleMessage(typeof(SettingsUi)));
         }
 
-        if (_apiController.AnyServerConnected)
+        UiSharedService.AttachToolTip("Open Laci Synchroni settings");
+        ImGui.SameLine();
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Running, "Data Hub", buttonX))
         {
-            var currentDisplayName = _apiController.GetDisplayNameByServer(serverId);
-            var currentUid = _apiController.GetUidByServer(serverId);
-            if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
-            {
-                ImGui.SetClipboardText(currentDisplayName);
-            }
-            UiSharedService.AttachToolTip("Click to copy");
-
-            if (!string.Equals(currentDisplayName, currentUid, StringComparison.Ordinal))
-            {
-                var origTextSize = ImGui.CalcTextSize(currentDisplayName);
-                ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (origTextSize.X / 2));
-                ImGui.TextColored(uidColor, currentDisplayName);
-                if (ImGui.IsItemClicked() && ImGui.IsWindowHovered())
-                {
-                    ImGui.SetClipboardText(currentDisplayName);
-                }
-                UiSharedService.AttachToolTip("Click to copy");
-            }
+            _syncMediator.Publish(new UiToggleMessage(typeof(CharaDataHubUi)));
         }
-        else if (_apiController.GetServerState(serverId) is not (ServerState.Disconnected or ServerState.Offline))
+
+        UiSharedService.AttachToolTip("Open the character data hub");
+        ImGui.SameLine();
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Satellite, "Service List", buttonX))
         {
-            var errorText = GetServerErrorByServer(serverId);
-            var origTextSize = ImGui.CalcTextSize(errorText);
-            ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (origTextSize.X / 2));
-            UiSharedService.ColorTextWrapped(errorText, uidColor);
+            _syncMediator.Publish(new ToggleServerSelectMessage());
         }
-    }
 
-    private void DrawServerStatusTooltipAndToggle(Vector2 rectMin, Vector2 rectMax)
-    {
-        if (!ImGui.IsMouseHoveringRect(rectMin, rectMax))
-            return;
-
-        if (ImGui.IsWindowHovered())
-        {
-            ImGui.SetTooltip("Click to manage service connections");
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-            {
-                ToggleMultiServerSelect();
-            }
-        }
+        UiSharedService.AttachToolTip("Toggle the server connections list");
+        ImGui.Spacing();
     }
 
     private void ToggleMultiServerSelect()
@@ -509,6 +503,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             {
                 ImGui.SetClipboardText(displayName);
             }
+
             UiSharedService.AttachToolTip("Click to copy");
 
             if (!string.Equals(displayName, uid, StringComparison.Ordinal))
@@ -518,10 +513,11 @@ public class CompactUi : WindowMediatorSubscriberBase
                 {
                     ImGui.SetClipboardText(displayName);
                 }
+
                 UiSharedService.AttachToolTip("Click to copy");
             }
         }
-        else if(_apiController.IsServerConnecting(serverId))
+        else if (_apiController.IsServerConnecting(serverId))
         {
             UiSharedService.ColorTextWrapped("Connecting", ImGuiColors.DalamudYellow);
             UiSharedService.AttachToolTip("The server is currently connecting. This may take a moment.");
@@ -570,15 +566,16 @@ public class CompactUi : WindowMediatorSubscriberBase
             }
         }
 
-        UiSharedService.AttachToolTip(isConnectingOrConnected ?
-           "Disconnect from " + serverName :
-           "Connect to " + serverName);
+        UiSharedService.AttachToolTip(isConnectingOrConnected
+            ? "Disconnect from " + serverName
+            : "Connect to " + serverName);
     }
 
     private void DrawOnlineUsers(int serverId)
     {
         if (_apiController.IsServerConnected(serverId))
-            ImGui.TextColored(ImGuiColors.ParsedGreen, _apiController.GetOnlineUsersForServer(serverId).ToString(CultureInfo.InvariantCulture));
+            ImGui.TextColored(ImGuiColors.ParsedGreen,
+                _apiController.GetOnlineUsersForServer(serverId).ToString(CultureInfo.InvariantCulture));
         else
             ImGui.TextColored(ImGuiColors.DalamudRed, string.Empty);
     }
@@ -586,7 +583,8 @@ public class CompactUi : WindowMediatorSubscriberBase
     private void DrawVisiblePairs(int serverId)
     {
         if (_apiController.IsServerConnected(serverId))
-            ImGui.TextColored(ImGuiColors.ParsedGreen, _pairManager.GetVisibleUserCount(serverId).ToString(CultureInfo.InvariantCulture));
+            ImGui.TextColored(ImGuiColors.ParsedGreen,
+                _pairManager.GetVisibleUserCount(serverId).ToString(CultureInfo.InvariantCulture));
         else
             ImGui.TextColored(ImGuiColors.DalamudRed, string.Empty);
     }
@@ -611,28 +609,24 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         var config = _playerPerformanceConfigService.Current;
 
+        ImGui.Spacing();
+
         var playerLoadMemory = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.OriginalSize));
         var playerLoadTriangles = _cachedAnalysis.Sum(c => c.Value.Sum(f => f.Value.Triangles));
 
-        var dataSectionTitle = "Character Load Data";
-        var origTextSizeX = ImGui.CalcTextSize(dataSectionTitle).X - ImGui.GetStyle().ItemSpacing.X;
-
-        using (_uiSharedService.IconFont.Push())
-        {
-            origTextSizeX += ImGui.CalcTextSize(FontAwesomeIcon.QuestionCircle.ToIconString()).X;
-        }
-
-        ImGui.SetCursorPosX((ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X) / 2 - (origTextSizeX / 2));
-        ImGui.TextUnformatted(dataSectionTitle);
-        _uiSharedService.DrawHelpText("This information uses your own settings for the warning and auto-pause threshold for comparison." + Environment.NewLine
-            + "This can be configured under Settings -> Performance.");
-
-        ImGui.TextUnformatted("Mem.:");
+        ImGui.TextUnformatted("Mem:");
         ImGui.SameLine();
         ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
 
+        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
+        ImGui.TextUnformatted("Tri:");
+        ImGui.SameLine();
+        ImGui.TextUnformatted($"{playerLoadTriangles}");
 
-        if (config.WarnOnExceedingThresholds && _characterAnalyzer.HasUnconvertedTextures)
+        ImGui.SameLine(ImGui.GetWindowWidth() - 27);
+        ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
+        _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
+        if (ImGui.IsItemHovered())
         {
             ImGui.SameLine();
             _uiSharedService.IconText(FontAwesomeIcon.PersonCircleQuestion);
@@ -651,8 +645,14 @@ public class CompactUi : WindowMediatorSubscriberBase
                         "Click to open the Character Data Analysis");
                 }
             }
+            UiSharedService.AttachToolTip(
+                $"This information uses your own settings for the warning and auto-pause threshold for comparison." +
+                Environment.NewLine +
+                "This can be configured under Settings -> Performance.");
         }
 
+        ImGui.PopStyleColor();
+        
         if (config.VRAMSizeAutoPauseThresholdMiB > 0)
         {
             var _playerLoadMemoryKiB = playerLoadMemory / 1024;
@@ -667,15 +667,10 @@ public class CompactUi : WindowMediatorSubscriberBase
             if (_playerLoadMemoryKiB > vramAutoPauseThreshold)
                 alert = true;
 
-            ImGuiHelpers.ScaledRelativeSameLine(180, ImGui.GetStyle().ItemSpacing.X);
             var calculatedRam = (float)_playerLoadMemoryKiB / (vramAutoPauseThreshold);
 
-            DrawProgressBar(calculatedRam, "VRAM usage", warning, alert);
+            DrawProgressBar(calculatedRam, "Autopause VRAM usage", warning, alert);
         }
-
-        ImGui.TextUnformatted("Tri.:");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"{playerLoadTriangles}");
 
         if (config.TrisAutoPauseThresholdThousands > 0)
         {
@@ -687,19 +682,118 @@ public class CompactUi : WindowMediatorSubscriberBase
             if (playerLoadTriangles > config.TrisAutoPauseThresholdThousands * 1000)
                 alert = true;
 
-            ImGuiHelpers.ScaledRelativeSameLine(180, ImGui.GetStyle().ItemSpacing.X);
+            ImGui.SameLine();
             var calculatedTriangles = ((float)playerLoadTriangles / (config.TrisAutoPauseThresholdThousands * 1000));
 
-            DrawProgressBar(calculatedTriangles, "Triangle count", warning, alert);
+            DrawProgressBar(calculatedTriangles, "Autopause Triangle count", warning, alert);
         }
 
+
+        ImGui.SameLine(ImGui.GetWindowWidth() - 31);
+        _uiSharedService.IconButton(FontAwesomeIcon.PersonCircleQuestion);
+        if (ImGui.IsItemHovered())
+        {
+            var unconvertedTextures = _characterAnalyzer.UnconvertedTextureCount;
+
+            if (ImGui.IsItemClicked())
+            {
+                Mediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
+            }
+
+            if (unconvertedTextures > 0)
+            {
+                UiSharedService.AttachToolTip(
+                    $"You have {unconvertedTextures} texture(s) that are not BC7 format. Consider converting them to BC7 to reduce their size." +
+                    UiSharedService.TooltipSeparator +
+                    "Click to open the Character Data Analysis");
+            }
+
+            if (unconvertedTextures == 0)
+            {
+                UiSharedService.AttachToolTip($"Click to open the Character Data Analysis");
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+    }
+
+    private void ServerSelection()
+    {
+        ImGui.Spacing();
+
+        _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes,
+            ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 98);
+        UiSharedService.AttachToolTip("Server to use for quick actions");
+
+        ImGui.SameLine();
+        if (_uiSharedService.IconButton(FontAwesomeIcon.UserCircle, "Edit Profile"))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(EditProfileUi)));
+        }
+
+        UiSharedService.AttachToolTip("Edit your Service Profiles");
+
+        ImGui.SameLine();
+        if (_uiSharedService.IconButton(FontAwesomeIcon.Clone, "Copy"))
+        {
+            ImGui.SetClipboardText(_apiController.GetDisplayNameByServer(_pairTabSelectedServer));
+        }
+
+        UiSharedService.AttachToolTip("Copy ID");
+
+        ImGui.SameLine();
+        DrawMultiServerConnectButton(_pairTabSelectedServer,
+            _serverConfigurationManager.GetServerNameByIndex(_pairTabSelectedServer));
+        
+        ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X -
+                               ImGui.GetStyle().ItemSpacing.X - 205);
+        ImGui.InputTextWithHint("##otheruid", "New Pair UID", ref _pairToAdd, 20);
+        ImGui.SameLine();
+        var alreadyExisting = _pairManager.DirectPairs.Exists(p =>
+            string.Equals(p.UserData.UID, _pairToAdd, StringComparison.Ordinal) ||
+            string.Equals(p.UserData.Alias, _pairToAdd, StringComparison.Ordinal));
+        using (ImRaii.Disabled(alreadyExisting || string.IsNullOrEmpty(_pairToAdd)))
+        {
+            if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserPlus, "Pair", 52))
+            {
+                // Adds pair for the current
+                _ = _apiController.UserAddPairToServer(_pairTabSelectedServer, _pairToAdd);
+                _pairToAdd = string.Empty;
+            }
+        }
+        UiSharedService.AttachToolTip("Pair with " + (_pairToAdd.IsNullOrEmpty() ? "other user" : _pairToAdd));
+        
+        ImGui.SameLine();
+        
+        ImGui.TextColored(ImGuiColors.DalamudGrey,"|");
+        
+        ImGui.SameLine();
+        
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Plus, "Create", 70))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(CreateSyncshellUI)));
+        }
+
+        UiSharedService.AttachToolTip("Create New Syncshell");
+        
+        ImGui.SameLine();
+
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Users, "Join", 52))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(JoinSyncshellUI)));
+        }
+
+        UiSharedService.AttachToolTip("Join Existing Syncshell");
+        
+        ImGui.Spacing();
         ImGui.Separator();
     }
 
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)
     {
-        float width = Math.Max(170, ImGui.GetContentRegionAvail().X);
-        var progressBarSize = new Vector2(width, 20);
+        float width = (ImGui.GetWindowWidth() - 54);
+        var progressBarSize = new Vector2(width / 2, 20);
 
         if (warning)
             ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudYellow);
@@ -713,38 +807,43 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.PopStyleColor();
     }
 
-    private void DrawTransfers()
+    private void DrawUploads()
     {
         var currentUploads = _fileTransferManager.CurrentUploads.ToList();
         ImGui.AlignTextToFramePadding();
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
         _uiSharedService.IconText(FontAwesomeIcon.Upload);
-        ImGui.SameLine(35 * ImGuiHelpers.GlobalScale);
+        ImGui.SameLine();
 
         if (currentUploads.Any())
         {
             var totalUploads = currentUploads.Count;
-
             var doneUploads = currentUploads.Count(c => c.IsTransferred);
             var totalUploaded = currentUploads.Sum(c => c.Transferred);
             var totalToUpload = currentUploads.Sum(c => c.Total);
-
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
             ImGui.TextUnformatted($"{doneUploads}/{totalUploads}");
-            var uploadText = $"({UiSharedService.ByteToString(totalUploaded)}/{UiSharedService.ByteToString(totalToUpload)})";
-            var textSize = ImGui.CalcTextSize(uploadText);
-            ImGui.SameLine(_windowContentWidth - textSize.X);
-            ImGui.AlignTextToFramePadding();
+            var uploadText =
+                $"({UiSharedService.ByteToString(totalUploaded)}/{UiSharedService.ByteToString(totalToUpload)})";
+            ImGui.SameLine();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
             ImGui.TextUnformatted(uploadText);
         }
         else
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted("No uploads in progress");
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
+            ImGui.TextUnformatted("N/A");
         }
+    }
 
+    private void DrawDownloads()
+    {
         var currentDownloads = _currentDownloads.SelectMany(d => d.Value.Values).ToList();
         ImGui.AlignTextToFramePadding();
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY());
         _uiSharedService.IconText(FontAwesomeIcon.Download);
-        ImGui.SameLine(35 * ImGuiHelpers.GlobalScale);
+        ImGui.SameLine();
 
         if (currentDownloads.Any())
         {
@@ -752,19 +851,19 @@ public class CompactUi : WindowMediatorSubscriberBase
             var doneDownloads = currentDownloads.Sum(c => c.TransferredFiles);
             var totalDownloaded = currentDownloads.Sum(c => c.TransferredBytes);
             var totalToDownload = currentDownloads.Sum(c => c.TotalBytes);
-
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY());
             ImGui.TextUnformatted($"{doneDownloads}/{totalDownloads}");
             var downloadText =
                 $"({UiSharedService.ByteToString(totalDownloaded)}/{UiSharedService.ByteToString(totalToDownload)})";
-            var textSize = ImGui.CalcTextSize(downloadText);
-            ImGui.SameLine(_windowContentWidth - textSize.X);
-            ImGui.AlignTextToFramePadding();
+            ImGui.SameLine();
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY());
             ImGui.TextUnformatted(downloadText);
         }
         else
         {
             ImGui.AlignTextToFramePadding();
-            ImGui.TextUnformatted("No downloads in progress");
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY());
+            ImGui.TextUnformatted("N/A");
         }
     }
 
@@ -785,32 +884,47 @@ public class CompactUi : WindowMediatorSubscriberBase
             .ToDictionary(k => k.Key, k => k.Value);
 
         string? AlphabeticalSort(KeyValuePair<Pair, List<GroupFullInfoDto>> u)
-            => (_configService.Current.ShowCharacterNameInsteadOfNotesForVisible && !string.IsNullOrEmpty(u.Key.PlayerName)
-                    ? (_configService.Current.PreferNotesOverNamesForVisible ? u.Key.GetNote() : u.Key.PlayerName)
-                    : (u.Key.GetNote() ?? u.Key.UserData.AliasOrUID));
+            => (_configService.Current.ShowCharacterNameInsteadOfNotesForVisible &&
+                !string.IsNullOrEmpty(u.Key.PlayerName)
+                ? (_configService.Current.PreferNotesOverNamesForVisible ? u.Key.GetNote() : u.Key.PlayerName)
+                : (u.Key.GetNote() ?? u.Key.UserData.AliasOrUID));
+
         bool FilterOnlineOrPausedSelf(KeyValuePair<Pair, List<GroupFullInfoDto>> u)
             => (u.Key.IsOnline || (!u.Key.IsOnline && !_configService.Current.ShowOfflineUsersSeparately)
-                    || u.Key.UserPair.OwnPermissions.IsPaused());
-        Dictionary<Pair, List<GroupFullInfoDto>> BasicSortedDictionary(IEnumerable<KeyValuePair<Pair, List<GroupFullInfoDto>>> u)
+                               || u.Key.UserPair.OwnPermissions.IsPaused());
+
+        Dictionary<Pair, List<GroupFullInfoDto>> BasicSortedDictionary(
+            IEnumerable<KeyValuePair<Pair, List<GroupFullInfoDto>>> u)
             => u.OrderByDescending(u => u.Key.IsVisible)
                 .ThenByDescending(u => u.Key.IsOnline)
                 .ThenBy(AlphabeticalSort, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(u => u.Key, u => u.Value);
+
         ImmutableList<Pair> ImmutablePairList(IEnumerable<KeyValuePair<Pair, List<GroupFullInfoDto>>> u)
             => u.Select(k => k.Key).ToImmutableList();
+
         bool FilterVisibleUsers(KeyValuePair<Pair, List<GroupFullInfoDto>> u)
             => u.Key.IsVisible
-                && (_configService.Current.ShowSyncshellUsersInVisible || !(!_configService.Current.ShowSyncshellUsersInVisible && !u.Key.IsDirectlyPaired));
+               && (_configService.Current.ShowSyncshellUsersInVisible ||
+                   !(!_configService.Current.ShowSyncshellUsersInVisible && !u.Key.IsDirectlyPaired));
+
         bool FilterTagusers(KeyValuePair<Pair, List<GroupFullInfoDto>> u, string tag, int serverIndex)
-            => u.Key.IsDirectlyPaired && !u.Key.IsOneSidedPair && _tagHandler.HasTag(serverIndex, u.Key.UserData.UID, tag);
+            => u.Key.IsDirectlyPaired && !u.Key.IsOneSidedPair &&
+               _tagHandler.HasTag(serverIndex, u.Key.UserData.UID, tag);
+
         bool FilterGroupUsers(KeyValuePair<Pair, List<GroupFullInfoDto>> u, GroupFullInfoDto group)
             => u.Value.Exists(g => string.Equals(g.GID, group.GID, StringComparison.Ordinal));
+
         bool FilterNotTaggedUsers(KeyValuePair<Pair, List<GroupFullInfoDto>> u)
-            => u.Key.IsDirectlyPaired && !u.Key.IsOneSidedPair && !_tagHandler.HasAnyTag(u.Key.ServerIndex, u.Key.UserData.UID);
+            => u.Key.IsDirectlyPaired && !u.Key.IsOneSidedPair &&
+               !_tagHandler.HasAnyTag(u.Key.ServerIndex, u.Key.UserData.UID);
+
         bool FilterOfflineUsers(KeyValuePair<Pair, List<GroupFullInfoDto>> u)
             => ((u.Key.IsDirectlyPaired && _configService.Current.ShowSyncshellOfflineUsersSeparately)
                 || !_configService.Current.ShowSyncshellOfflineUsersSeparately)
-                && (!u.Key.IsOneSidedPair || u.Value.Any()) && !u.Key.IsOnline && !u.Key.UserPair.OwnPermissions.IsPaused();
+               && (!u.Key.IsOneSidedPair || u.Value.Any()) && !u.Key.IsOnline &&
+               !u.Key.UserPair.OwnPermissions.IsPaused();
+
         bool FilterOfflineSyncshellUsers(KeyValuePair<Pair, List<GroupFullInfoDto>> u)
             => (!u.Key.IsDirectlyPaired && !u.Key.IsOnline && !u.Key.UserPair.OwnPermissions.IsPaused());
 
@@ -821,11 +935,13 @@ public class CompactUi : WindowMediatorSubscriberBase
             var filteredVisiblePairs = BasicSortedDictionary(filteredPairs
                 .Where(FilterVisibleUsers));
 
-            drawFolders.Add(_drawEntityFactory.CreateDrawTagFolderForCustomTag(TagHandler.CustomVisibleTag, filteredVisiblePairs, allVisiblePairs));
+            drawFolders.Add(_drawEntityFactory.CreateDrawTagFolderForCustomTag(TagHandler.CustomVisibleTag,
+                filteredVisiblePairs, allVisiblePairs));
         }
 
         List<IDrawFolder> groupFolders = new();
-        foreach (var group in _pairManager.GroupPairs.Select(g => g.Key).OrderBy(g => g.GroupFullInfo.GroupAliasOrGID, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in _pairManager.GroupPairs.Select(g => g.Key)
+                     .OrderBy(g => g.GroupFullInfo.GroupAliasOrGID, StringComparer.OrdinalIgnoreCase))
         {
             var allGroupPairs = ImmutablePairList(allPairs
                 .Where(u => FilterGroupUsers(u, group.GroupFullInfo)));
@@ -835,12 +951,14 @@ public class CompactUi : WindowMediatorSubscriberBase
                 .OrderByDescending(u => u.Key.IsOnline)
                 .ThenBy(u =>
                 {
-                    if (string.Equals(u.Key.UserData.UID, group.GroupFullInfo.OwnerUID, StringComparison.Ordinal)) return 0;
+                    if (string.Equals(u.Key.UserData.UID, group.GroupFullInfo.OwnerUID, StringComparison.Ordinal))
+                        return 0;
                     if (group.GroupFullInfo.GroupPairUserInfos.TryGetValue(u.Key.UserData.UID, out var info))
                     {
                         if (info.IsModerator()) return 1;
                         if (info.IsPinned()) return 2;
                     }
+
                     return u.Key.IsVisible ? 3 : 4;
                 })
                 .ThenBy(AlphabeticalSort, StringComparer.OrdinalIgnoreCase)
@@ -870,7 +988,9 @@ public class CompactUi : WindowMediatorSubscriberBase
         var onlineNotTaggedPairs = BasicSortedDictionary(filteredPairs
             .Where(u => FilterNotTaggedUsers(u) && FilterOnlineOrPausedSelf(u)));
 
-        drawFolders.Add(_drawEntityFactory.CreateDrawTagFolderForCustomTag((_configService.Current.ShowOfflineUsersSeparately ? TagHandler.CustomOnlineTag : TagHandler.CustomAllTag), onlineNotTaggedPairs, allOnlineNotTaggedPairs));
+        drawFolders.Add(_drawEntityFactory.CreateDrawTagFolderForCustomTag(
+            (_configService.Current.ShowOfflineUsersSeparately ? TagHandler.CustomOnlineTag : TagHandler.CustomAllTag),
+            onlineNotTaggedPairs, allOnlineNotTaggedPairs));
 
         if (_configService.Current.ShowOfflineUsersSeparately)
         {
@@ -879,7 +999,8 @@ public class CompactUi : WindowMediatorSubscriberBase
             var filteredOfflinePairs = BasicSortedDictionary(filteredPairs
                 .Where(FilterOfflineUsers));
 
-            drawFolders.Add(_drawEntityFactory.CreateDrawTagFolderForCustomTag(TagHandler.CustomOfflineTag, filteredOfflinePairs, allOfflinePairs));
+            drawFolders.Add(_drawEntityFactory.CreateDrawTagFolderForCustomTag(TagHandler.CustomOfflineTag,
+                filteredOfflinePairs, allOfflinePairs));
             if (_configService.Current.ShowSyncshellOfflineUsersSeparately)
             {
                 var allOfflineSyncshellUsers = ImmutablePairList(allPairs
@@ -919,14 +1040,21 @@ public class CompactUi : WindowMediatorSubscriberBase
             ServerState.Offline => "This server is currently offline.",
             ServerState.VersionMisMatch =>
                 "Your plugin or the server you are connecting to is out of date. Please update your plugin now. If you already did so, contact the server provider to update their server to the latest version.",
-            ServerState.RateLimited => "You are rate limited for (re)connecting too often. Disconnect, wait 10 minutes and try again.",
+            ServerState.RateLimited =>
+                "You are rate limited for (re)connecting too often. Disconnect, wait 10 minutes and try again.",
             ServerState.Connected => string.Empty,
-            ServerState.NoSecretKey => "You have no secret key set for this current character. Open Settings -> Service Settings and set a secret key for the current character. You can reuse the same secret key for multiple characters.",
-            ServerState.MultiChara => "Your Character Configuration has multiple characters configured with same name and world. You will not be able to connect until you fix this issue. Remove the duplicates from the configuration in Settings -> Service Settings -> Character Management and reconnect manually after.",
-            ServerState.OAuthMisconfigured => "OAuth2 is enabled but not fully configured, verify in the Settings -> Service Settings that you have OAuth2 connected and, importantly, a UID assigned to your current character.",
-            ServerState.OAuthLoginTokenStale => "Your OAuth2 login token is stale and cannot be used to renew. Go to the Settings -> Service Settings and unlink then relink your OAuth2 configuration.",
-            ServerState.NoAutoLogon => "This character has automatic login disabled for all servers. Press the connect button to connect to a server.",
-            ServerState.NoHubFound => "Sync Hub not found. Please request the correct Hub URI from the person running the server you want to connect to.",
+            ServerState.NoSecretKey =>
+                "You have no secret key set for this current character. Open Settings -> Service Settings and set a secret key for the current character. You can reuse the same secret key for multiple characters.",
+            ServerState.MultiChara =>
+                "Your Character Configuration has multiple characters configured with same name and world. You will not be able to connect until you fix this issue. Remove the duplicates from the configuration in Settings -> Service Settings -> Character Management and reconnect manually after.",
+            ServerState.OAuthMisconfigured =>
+                "OAuth2 is enabled but not fully configured, verify in the Settings -> Service Settings that you have OAuth2 connected and, importantly, a UID assigned to your current character.",
+            ServerState.OAuthLoginTokenStale =>
+                "Your OAuth2 login token is stale and cannot be used to renew. Go to the Settings -> Service Settings and unlink then relink your OAuth2 configuration.",
+            ServerState.NoAutoLogon =>
+                "This character has automatic login disabled for all servers. Press the connect button to connect to a server.",
+            ServerState.NoHubFound =>
+                "Sync Hub not found. Please request the correct Hub URI from the person running the server you want to connect to.",
             _ => string.Empty
         };
     }

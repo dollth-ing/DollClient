@@ -129,34 +129,11 @@ public class TopTabMenu
         }
         else if (TabSelection == SelectedTab.Syncshell)
         {
-            DrawSyncshellMenu(availableWidth, spacing.X);
             DrawGlobalSyncshellButtons(availableWidth, spacing.X);
         }
 
         if (TabSelection != SelectedTab.None) ImGuiHelpers.ScaledDummy(3f);
         ImGui.Separator();
-    }
-
-    private void DrawAddPair(float availableXWidth, float spacingX)
-    {
-        _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.ConnectedServerIndexes, availableXWidth);
-        UiSharedService.AttachToolTip("Server to use for pair actions");
-
-        var buttonSize = _uiSharedService.GetIconTextButtonSize(FontAwesomeIcon.UserPlus, "Add");
-        ImGui.SetNextItemWidth(availableXWidth - buttonSize - spacingX);
-        ImGui.InputTextWithHint("##otheruid", "Other players UID/Alias", ref _pairToAdd, 20);
-        ImGui.SameLine();
-        var alreadyExisting = _pairManager.DirectPairs.Exists(p => string.Equals(p.UserData.UID, _pairToAdd, StringComparison.Ordinal) || string.Equals(p.UserData.Alias, _pairToAdd, StringComparison.Ordinal));
-        using (ImRaii.Disabled(alreadyExisting || string.IsNullOrEmpty(_pairToAdd)))
-        {
-            if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserPlus, "Add"))
-            {
-                // Adds pair for the current
-                _ = _apiController.UserAddPairToServer(_pairTabSelectedServer, _pairToAdd);
-                _pairToAdd = string.Empty;
-            }
-        }
-        UiSharedService.AttachToolTip("Pair with " + (_pairToAdd.IsNullOrEmpty() ? "other user" : _pairToAdd));
     }
 
     public void DrawFilter(float availableWidth, float spacingX)
@@ -422,22 +399,6 @@ public class TopTabMenu
             + "the ones of the last applied syncshell in alphabetical order." + UiSharedService.TooltipSeparator
             + "Hold CTRL to enable this button"
             + (_globalControlCountdown > 0 ? UiSharedService.TooltipSeparator + "Available again in " + _globalControlCountdown + " seconds." : string.Empty));
-    }
-
-    private void DrawSyncshellMenu(float availableWidth, float spacingX)
-    {
-        var buttonX = (availableWidth - (spacingX)) / 2f;
-
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Plus, "Create new Syncshell", buttonX))
-        {
-            _syncMediator.Publish(new UiToggleMessage(typeof(CreateSyncshellUI)));
-        }
-        ImGui.SameLine();
-
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Users, "Join existing Syncshell", buttonX))
-        {
-            _syncMediator.Publish(new UiToggleMessage(typeof(JoinSyncshellUI)));
-        }
     }
 
     private async Task GlobalControlCountdown(int countdown)
