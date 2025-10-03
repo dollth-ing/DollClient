@@ -92,7 +92,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         _syncMediator = syncMediator;
         _playerPerformanceConfigService = playerPerformanceConfigService;
         _serverConfigurationManager = serverConfigurationManager;
-        _tabMenu = new TopTabMenu(Mediator, _apiController, _pairManager, _uiSharedService, _serverConfigManager);
+        _tabMenu = new TopTabMenu(Mediator, _apiController, _pairManager, _uiSharedService);
         _pairTabServerSelector = new ServerSelectorSmall(index => _pairTabSelectedServer = index);
 
         CheckForCharacterAnalysis();
@@ -224,12 +224,11 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         using (ImRaii.PushId("topmenu2")) ServerSelection();
 
-        using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
-
         ImGui.BeginDisabled(!_apiController.AnyServerConnected);
 
         using (ImRaii.PushId("pairlist")) DrawPairs();
         ImGui.Separator();
+        using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
         using (ImRaii.PushId("filter"))
             _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X,
                 ImGui.GetStyle().ItemSpacing.X);
@@ -290,7 +289,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var ySize = _transferPartHeight == 0
             ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 24
+            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 24 - _tabMenu.CurrentHeight
                   + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) -
               _transferPartHeight - ImGui.GetCursorPosY();
 
@@ -788,6 +787,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         
         ImGui.Spacing();
         ImGui.Separator();
+        ImGui.Spacing();
     }
 
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)

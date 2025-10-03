@@ -20,24 +20,20 @@ public class TopTabMenu
     private readonly SyncMediator _syncMediator;
     private readonly PairManager _pairManager;
     private readonly UiSharedService _uiSharedService;
-    private readonly ServerConfigurationManager _serverConfigurationManager;
-    private readonly ServerSelectorSmall _pairTabServerSelector;
 
     private string _filter = string.Empty;
     private int _globalControlCountdown = 0;
-
-    private string _pairToAdd = string.Empty;
+    public int CurrentHeight;
+    
     private int _pairTabSelectedServer = 0;
 
     private SelectedTab _selectedTab = SelectedTab.None;
-    public TopTabMenu(SyncMediator syncMediator, ApiController apiController, PairManager pairManager, UiSharedService uiSharedService, ServerConfigurationManager serverConfigurationManager)
+    public TopTabMenu(SyncMediator syncMediator, ApiController apiController, PairManager pairManager, UiSharedService uiSharedService)
     {
         _syncMediator = syncMediator;
         _apiController = apiController;
         _pairManager = pairManager;
         _uiSharedService = uiSharedService;
-        _serverConfigurationManager = serverConfigurationManager;
-        _pairTabServerSelector = new ServerSelectorSmall(index => _pairTabSelectedServer = index);
     }
 
     private enum SelectedTab
@@ -67,6 +63,7 @@ public class TopTabMenu
             _selectedTab = value;
         }
     }
+
     public void Draw()
     {
         var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
@@ -79,7 +76,22 @@ public class TopTabMenu
         var btncolor = ImRaii.PushColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new(0, 0, 0, 0)));
 
         ImGuiHelpers.ScaledDummy(spacing.Y / 2f);
-
+    
+        if (TabSelection == SelectedTab.Individual)
+        {
+            CurrentHeight = 75;
+            DrawGlobalIndividualButtons(availableWidth, spacing.X);
+        }
+        else if (TabSelection == SelectedTab.Syncshell)
+        {
+            CurrentHeight = 75;
+            DrawGlobalSyncshellButtons(availableWidth, spacing.X);
+        }
+        else if (TabSelection == SelectedTab.None)
+        {
+            CurrentHeight = 41;
+        }
+        
         using (ImRaii.PushFont(UiBuilder.IconFont))
         {
             ImGui.BeginDisabled(!_apiController.AnyServerConnected);
@@ -120,22 +132,10 @@ public class TopTabMenu
 
         ImGui.NewLine();
         btncolor.Dispose();
-
         ImGuiHelpers.ScaledDummy(spacing);
-
-        if (TabSelection == SelectedTab.Individual)
-        {
-            DrawGlobalIndividualButtons(availableWidth, spacing.X);
-        }
-        else if (TabSelection == SelectedTab.Syncshell)
-        {
-            DrawGlobalSyncshellButtons(availableWidth, spacing.X);
-        }
-
         if (TabSelection != SelectedTab.None) ImGuiHelpers.ScaledDummy(3f);
-        ImGui.Separator();
     }
-
+    
     public void DrawFilter(float availableWidth, float spacingX)
     {
         var buttonSize = _uiSharedService.GetIconTextButtonSize(FontAwesomeIcon.Ban, "Clear");
