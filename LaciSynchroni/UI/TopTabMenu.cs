@@ -1,5 +1,6 @@
 ﻿using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
+using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
@@ -22,9 +23,10 @@ public class TopTabMenu
     private readonly UiSharedService _uiSharedService;
 
     private string _filter = string.Empty;
-    private int _globalControlCountdown = 0;
     
-    private int _pairTabSelectedServer = 0;
+    private int _globalControlCountdown;
+    
+    public int pairTabSelectedServer = 0;
 
     private SelectedTab _selectedTab = SelectedTab.None;
     public TopTabMenu(SyncMediator syncMediator, ApiController apiController, PairManager pairManager, UiSharedService uiSharedService)
@@ -38,8 +40,9 @@ public class TopTabMenu
     private enum SelectedTab
     {
         None,
+        Filter,
         Individual,
-        Syncshell,
+        Syncshell
     }
 
     public string Filter
@@ -65,59 +68,67 @@ public class TopTabMenu
 
     public void Draw()
     {
-        var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
         var spacing = ImGui.GetStyle().ItemSpacing;
-        var buttonX = (availableWidth - (spacing.X * 3)) / 2;
-        var buttonY = _uiSharedService.GetIconButtonSize(FontAwesomeIcon.Pause).Y;
-        var buttonSize = new Vector2(buttonX, buttonY);
-        var drawList = ImGui.GetWindowDrawList();
-        var underlineColor = ImGui.GetColorU32(ImGuiCol.Separator);
-        var btncolor = ImRaii.PushColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new(0, 0, 0, 0)));
-
-        ImGuiHelpers.ScaledDummy(spacing.Y / 2f);
         
-        using (ImRaii.PushFont(UiBuilder.IconFont))
+        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        if (_uiSharedService.IconButton(FontAwesomeIcon.Filter))
         {
-            ImGui.BeginDisabled(!_apiController.AnyServerConnected);
-            var x = ImGui.GetCursorScreenPos();
-            if (ImGui.Button(FontAwesomeIcon.User.ToIconString(), buttonSize))
-            {
-                TabSelection = TabSelection == SelectedTab.Individual ? SelectedTab.None : SelectedTab.Individual;
-            }
-            ImGui.SameLine();
-            var xAfter = ImGui.GetCursorScreenPos();
-            if (TabSelection == SelectedTab.Individual)
-                drawList.AddLine(x with { Y = x.Y + buttonSize.Y + spacing.Y },
-                    xAfter with { Y = xAfter.Y + buttonSize.Y + spacing.Y, X = xAfter.X - spacing.X },
-                    underlineColor, 2);
-            ImGui.EndDisabled();
+            TabSelection = TabSelection == SelectedTab.Filter ? SelectedTab.None : SelectedTab.Filter;
         }
+        ImGui.SameLine();
+        
+        ImGui.EndDisabled();
+        
+        UiSharedService.AttachToolTip("Filter Menu");
+        
+        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        if (_uiSharedService.IconButton(FontAwesomeIcon.User))
+        {
+            TabSelection = TabSelection == SelectedTab.Individual ? SelectedTab.None : SelectedTab.Individual;
+        }
+        ImGui.SameLine();
+        ImGui.EndDisabled();
+        
         UiSharedService.AttachToolTip("Individual Pair Menu");
-
-        using (ImRaii.PushFont(UiBuilder.IconFont))
+        
+        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        if (_uiSharedService.IconButton(FontAwesomeIcon.Users))
         {
-            ImGui.BeginDisabled(!_apiController.AnyServerConnected);
-            var x = ImGui.GetCursorScreenPos();
-            if (ImGui.Button(FontAwesomeIcon.Users.ToIconString(), buttonSize))
-            {
-                TabSelection = TabSelection == SelectedTab.Syncshell ? SelectedTab.None : SelectedTab.Syncshell;
-            }
-            ImGui.SameLine();
-            var xAfter = ImGui.GetCursorScreenPos();
-            if (TabSelection == SelectedTab.Syncshell)
-                drawList.AddLine(x with { Y = x.Y + buttonSize.Y + spacing.Y },
-                    xAfter with { Y = xAfter.Y + buttonSize.Y + spacing.Y, X = xAfter.X - spacing.X },
-                    underlineColor, 2);
-            ImGui.EndDisabled();
+            TabSelection = TabSelection == SelectedTab.Syncshell ? SelectedTab.None : SelectedTab.Syncshell;
         }
+        ImGui.EndDisabled();
+        
         UiSharedService.AttachToolTip("Syncshell Menu");
 
         ImGui.SameLine();
 
-        ImGui.NewLine();
-        btncolor.Dispose();
-        ImGuiHelpers.ScaledDummy(spacing);
-        if (TabSelection != SelectedTab.None) ImGuiHelpers.ScaledDummy(3f);
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "|");
+        
+        ImGui.SameLine();
+        
+        if (TabSelection == SelectedTab.Filter)
+        {
+            ImGui.SameLine();
+            DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 110,
+                ImGui.GetStyle().ItemSpacing.X);
+        } else if (TabSelection == SelectedTab.Individual)
+        {
+            ImGui.SameLine();
+            DrawGlobalIndividualButtons(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 110,
+                ImGui.GetStyle().ItemSpacing.X);
+        } else if (TabSelection == SelectedTab.Syncshell)
+        {
+            ImGui.SameLine();
+            DrawGlobalSyncshellButtons(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 110,
+                ImGui.GetStyle().ItemSpacing.X);
+            
+        } else if (TabSelection == SelectedTab.None)
+        {
+            ImGuiHelpers.ScaledDummy(spacing.Y / 2f);
+        }
+        
+        ImGui.Spacing();
+        ImGui.Separator();
     }
     
     public void DrawFilter(float availableWidth, float spacingX)
@@ -374,7 +385,7 @@ public class TopTabMenu
                         return perm;
                     }, StringComparer.Ordinal);
 
-                _ = _apiController.SetBulkPermissions(_pairTabSelectedServer, new(new(StringComparer.Ordinal), bulkSyncshells)).ConfigureAwait(false);
+                _ = _apiController.SetBulkPermissions(pairTabSelectedServer, new(new(StringComparer.Ordinal), bulkSyncshells)).ConfigureAwait(false);
             }
         }
         UiSharedService.AttachToolTip("Globally align syncshell permissions to suggested syncshell permissions." + UiSharedService.TooltipSeparator
@@ -415,7 +426,7 @@ public class TopTabMenu
                         return actEnable(g.UserPair.OwnPermissions);
                     }, StringComparer.Ordinal);
 
-                _ = _apiController.SetBulkPermissions(_pairTabSelectedServer, new(bulkIndividualPairs, new(StringComparer.Ordinal))).ConfigureAwait(false);
+                _ = _apiController.SetBulkPermissions(pairTabSelectedServer, new(bulkIndividualPairs, new(StringComparer.Ordinal))).ConfigureAwait(false);
                 ImGui.CloseCurrentPopup();
             }
 
@@ -428,7 +439,7 @@ public class TopTabMenu
                     {
                         return actDisable(g.UserPair.OwnPermissions);
                     }, StringComparer.Ordinal);
-                _ = _apiController.SetBulkPermissions(_pairTabSelectedServer, new(bulkIndividualPairs, new(StringComparer.Ordinal))).ConfigureAwait(false);
+                _ = _apiController.SetBulkPermissions(pairTabSelectedServer, new(bulkIndividualPairs, new(StringComparer.Ordinal))).ConfigureAwait(false);
                 ImGui.CloseCurrentPopup();
             }
             ImGui.EndPopup();
@@ -452,7 +463,7 @@ public class TopTabMenu
                         return actEnable(g.GroupFullInfo.GroupUserPermissions);
                     }, StringComparer.Ordinal);
 
-                _ = _apiController.SetBulkPermissions(_pairTabSelectedServer, new(new(StringComparer.Ordinal), bulkSyncshells)).ConfigureAwait(false);
+                _ = _apiController.SetBulkPermissions(pairTabSelectedServer, new(new(StringComparer.Ordinal), bulkSyncshells)).ConfigureAwait(false);
                 ImGui.CloseCurrentPopup();
             }
 
@@ -466,7 +477,7 @@ public class TopTabMenu
                         return actDisable(g.GroupFullInfo.GroupUserPermissions);
                     }, StringComparer.Ordinal);
 
-                _ = _apiController.SetBulkPermissions(_pairTabSelectedServer, new(new(StringComparer.Ordinal), bulkSyncshells)).ConfigureAwait(false);
+                _ = _apiController.SetBulkPermissions(pairTabSelectedServer, new(new(StringComparer.Ordinal), bulkSyncshells)).ConfigureAwait(false);
                 ImGui.CloseCurrentPopup();
             }
             ImGui.EndPopup();

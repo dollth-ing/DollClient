@@ -218,12 +218,11 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.Separator();
 
         using (ImRaii.PushId("topmenu2")) ServerSelection();
+        
         using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
-        using (ImRaii.PushId("filter"))
-            _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X,
-                ImGui.GetStyle().ItemSpacing.X);
-
+        
         ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        
         using (ImRaii.PushId("pairlist")) DrawPairs();
         ImGui.Separator();
         if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
@@ -729,6 +728,9 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes,
             ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 98);
+        
+        _tabMenu.pairTabSelectedServer = _pairTabSelectedServer;
+        
         UiSharedService.AttachToolTip("Server to use for quick actions");
 
         ImGui.SameLine();
