@@ -23,7 +23,6 @@ public class TopTabMenu
 
     private string _filter = string.Empty;
     private int _globalControlCountdown = 0;
-    public int CurrentHeight;
     
     private int _pairTabSelectedServer = 0;
 
@@ -76,21 +75,6 @@ public class TopTabMenu
         var btncolor = ImRaii.PushColor(ImGuiCol.Button, ImGui.ColorConvertFloat4ToU32(new(0, 0, 0, 0)));
 
         ImGuiHelpers.ScaledDummy(spacing.Y / 2f);
-    
-        if (TabSelection == SelectedTab.Individual)
-        {
-            CurrentHeight = 75;
-            DrawGlobalIndividualButtons(availableWidth, spacing.X);
-        }
-        else if (TabSelection == SelectedTab.Syncshell)
-        {
-            CurrentHeight = 75;
-            DrawGlobalSyncshellButtons(availableWidth, spacing.X);
-        }
-        else if (TabSelection == SelectedTab.None)
-        {
-            CurrentHeight = 41;
-        }
         
         using (ImRaii.PushFont(UiBuilder.IconFont))
         {

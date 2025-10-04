@@ -217,27 +217,26 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         ImGui.Separator();
 
-        if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
-        {
-            using (ImRaii.PushId("modload")) DrawModLoad();
-        }
-
         using (ImRaii.PushId("topmenu2")) ServerSelection();
-
-        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
-
-        using (ImRaii.PushId("pairlist")) DrawPairs();
-        ImGui.Separator();
         using (ImRaii.PushId("global-topmenu")) _tabMenu.Draw();
         using (ImRaii.PushId("filter"))
             _tabMenu.DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X,
                 ImGui.GetStyle().ItemSpacing.X);
+
+        ImGui.BeginDisabled(!_apiController.AnyServerConnected);
+        using (ImRaii.PushId("pairlist")) DrawPairs();
+        ImGui.Separator();
+        if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
+        {
+            using (ImRaii.PushId("modload")) DrawModLoad();
+        }
 
         float pairlistEnd = ImGui.GetCursorPosY();
         _transferPartHeight = ImGui.GetCursorPosY() - pairlistEnd - ImGui.GetTextLineHeight();
         using (ImRaii.PushId("group-user-popup")) _selectPairsForGroupUi.Draw(_pairManager.DirectPairs);
         using (ImRaii.PushId("grouping-popup")) _selectGroupForPairUi.Draw();
         ImGui.EndDisabled();
+        using (ImRaii.PushId("menubuttons")) drawMenuButtons();
 
         if (_configService.Current.OpenPopupOnAdd && _pairManager.LastAddedUser != null)
         {
@@ -289,7 +288,7 @@ public class CompactUi : WindowMediatorSubscriberBase
     {
         var ySize = _transferPartHeight == 0
             ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 24 - _tabMenu.CurrentHeight
+            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 86
                   + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) -
               _transferPartHeight - ImGui.GetCursorPosY();
 
@@ -383,32 +382,6 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
         ImGui.Spacing();
-        ImGui.Spacing();
-
-        var spacing = ImGui.GetStyle().ItemSpacing;
-        var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
-
-        var buttonX = (availableWidth - spacing.X - 8) / 3f;
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Cog, "Settings", buttonX))
-        {
-            Mediator.Publish(new UiToggleMessage(typeof(SettingsUi)));
-        }
-
-        UiSharedService.AttachToolTip("Open Laci Synchroni settings");
-        ImGui.SameLine();
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Running, "Data Hub", buttonX))
-        {
-            _syncMediator.Publish(new UiToggleMessage(typeof(CharaDataHubUi)));
-        }
-
-        UiSharedService.AttachToolTip("Open the character data hub");
-        ImGui.SameLine();
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Satellite, "Service List", buttonX))
-        {
-            _syncMediator.Publish(new ToggleServerSelectMessage());
-        }
-
-        UiSharedService.AttachToolTip("Toggle the server connections list");
         ImGui.Spacing();
     }
 
@@ -637,13 +610,16 @@ public class CompactUi : WindowMediatorSubscriberBase
                 {
                     Mediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
                 }
+
                 if (unconvertedTextures > 0)
                 {
-                    UiSharedService.AttachToolTip($"You have {unconvertedTextures} texture(s) that are not compressed. Consider converting them to BC7 to reduce their size." +
+                    UiSharedService.AttachToolTip(
+                        $"You have {unconvertedTextures} texture(s) that are not compressed. Consider converting them to BC7 to reduce their size." +
                         UiSharedService.TooltipSeparator +
                         "Click to open the Character Data Analysis");
                 }
             }
+
             UiSharedService.AttachToolTip(
                 $"This information uses your own settings for the warning and auto-pause threshold for comparison." +
                 Environment.NewLine +
@@ -651,7 +627,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
         ImGui.PopStyleColor();
-        
+
         if (config.VRAMSizeAutoPauseThresholdMiB > 0)
         {
             var _playerLoadMemoryKiB = playerLoadMemory / 1024;
@@ -717,6 +693,36 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.Separator();
     }
 
+    private void drawMenuButtons()
+    {
+        ImGui.Spacing();
+
+        var spacing = ImGui.GetStyle().ItemSpacing;
+        var availableWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
+
+        var buttonX = (availableWidth - spacing.X - 8) / 3f;
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Cog, "Settings", buttonX))
+        {
+            Mediator.Publish(new UiToggleMessage(typeof(SettingsUi)));
+        }
+
+        UiSharedService.AttachToolTip("Open Laci Synchroni settings");
+        ImGui.SameLine();
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Running, "Data Hub", buttonX))
+        {
+            _syncMediator.Publish(new UiToggleMessage(typeof(CharaDataHubUi)));
+        }
+
+        UiSharedService.AttachToolTip("Open the character data hub");
+        ImGui.SameLine();
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Satellite, "Service List", buttonX))
+        {
+            _syncMediator.Publish(new ToggleServerSelectMessage());
+        }
+
+        UiSharedService.AttachToolTip("Toggle the server connections list");
+    }
+
     private void ServerSelection()
     {
         ImGui.Spacing();
@@ -744,7 +750,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.SameLine();
         DrawMultiServerConnectButton(_pairTabSelectedServer,
             _serverConfigurationManager.GetServerNameByIndex(_pairTabSelectedServer));
-        
+
         ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X -
                                ImGui.GetStyle().ItemSpacing.X - 205);
         ImGui.InputTextWithHint("##otheruid", "New Pair UID", ref _pairToAdd, 20);
@@ -761,21 +767,22 @@ public class CompactUi : WindowMediatorSubscriberBase
                 _pairToAdd = string.Empty;
             }
         }
+
         UiSharedService.AttachToolTip("Pair with " + (_pairToAdd.IsNullOrEmpty() ? "other user" : _pairToAdd));
-        
+
         ImGui.SameLine();
-        
-        ImGui.TextColored(ImGuiColors.DalamudGrey,"|");
-        
+
+        ImGui.TextColored(ImGuiColors.DalamudGrey, "|");
+
         ImGui.SameLine();
-        
+
         if (_uiSharedService.IconTextButton(FontAwesomeIcon.Plus, "Create", 70))
         {
             _syncMediator.Publish(new UiToggleMessage(typeof(CreateSyncshellUI)));
         }
 
         UiSharedService.AttachToolTip("Create New Syncshell");
-        
+
         ImGui.SameLine();
 
         if (_uiSharedService.IconTextButton(FontAwesomeIcon.Users, "Join", 52))
@@ -784,7 +791,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
         UiSharedService.AttachToolTip("Join Existing Syncshell");
-        
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -1020,7 +1027,6 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         return drawFolders;
     }
-
 
     private string GetServerErrorByServer(int serverId)
     {
