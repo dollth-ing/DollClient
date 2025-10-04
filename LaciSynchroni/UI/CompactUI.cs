@@ -757,10 +757,8 @@ public class CompactUi : WindowMediatorSubscriberBase
                                ImGui.GetStyle().ItemSpacing.X - 205);
         ImGui.InputTextWithHint("##otheruid", "New Pair UID", ref _pairToAdd, 20);
         ImGui.SameLine();
-        var alreadyExisting = _pairManager.DirectPairs.Exists(p =>
-            string.Equals(p.UserData.UID, _pairToAdd, StringComparison.Ordinal) ||
-            string.Equals(p.UserData.Alias, _pairToAdd, StringComparison.Ordinal));
-        using (ImRaii.Disabled(alreadyExisting || string.IsNullOrEmpty(_pairToAdd)))
+
+        using (ImRaii.Disabled(string.IsNullOrEmpty(_pairToAdd)))
         {
             if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserPlus, "Pair", 52))
             {
