@@ -1,5 +1,6 @@
 name: Build and release
 
+
 on:
   push:
     tags:
@@ -18,7 +19,7 @@ jobs:
       contents: write
       attestations: write
     runs-on: windows-latest
-    if: github.repository_owner == 'LaciSynchroni'
+    if: github.repository_owner == 'dollth-ing'
     steps:
       - uses: actions/checkout@v5
         with:
