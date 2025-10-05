@@ -722,7 +722,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.Spacing();
 
         _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes,
-            ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 98);
+            ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - (53 *  globalScale) - 45);
         
         _tabMenu.pairTabSelectedServer = _pairTabSelectedServer;
         
