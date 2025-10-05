@@ -69,6 +69,7 @@ public class TopTabMenu
     public void Draw()
     {
         var spacing = ImGui.GetStyle().ItemSpacing;
+        float globalScale = ImGuiHelpers.GlobalScale;
         
         ImGui.BeginDisabled(!_apiController.AnyServerConnected);
         if (_uiSharedService.IconButton(FontAwesomeIcon.Filter))
@@ -109,17 +110,17 @@ public class TopTabMenu
         if (TabSelection == SelectedTab.Filter)
         {
             ImGui.SameLine();
-            DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 110,
+            DrawFilter(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - (55 * globalScale) - 55,
                 ImGui.GetStyle().ItemSpacing.X);
         } else if (TabSelection == SelectedTab.Individual)
         {
             ImGui.SameLine();
-            DrawGlobalIndividualButtons(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 110,
+            DrawGlobalIndividualButtons(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - (55 * globalScale) - 55,
                 ImGui.GetStyle().ItemSpacing.X);
         } else if (TabSelection == SelectedTab.Syncshell)
         {
             ImGui.SameLine();
-            DrawGlobalSyncshellButtons(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - 110,
+            DrawGlobalSyncshellButtons(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X - (55 * globalScale) - 55,
                 ImGui.GetStyle().ItemSpacing.X);
             
         } else if (TabSelection == SelectedTab.None)

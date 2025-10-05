@@ -2,6 +2,7 @@
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Utility;
 using LaciSynchroni.Common.Data.Extensions;
@@ -285,11 +286,19 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private void DrawPairs()
     {
+        float globalScale = ImGuiHelpers.GlobalScale;
+        
         var ySize = _transferPartHeight == 0
             ? 1
-            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - 86
+            : (ImGui.GetWindowContentRegionMax().Y - ImGui.GetWindowContentRegionMin().Y - (30 * globalScale)
                   + ImGui.GetTextLineHeight() - ImGui.GetStyle().WindowPadding.Y - ImGui.GetStyle().WindowBorderSize) -
               _transferPartHeight - ImGui.GetCursorPosY();
+        if (_playerPerformanceConfigService.Current.ShowPlayerPerformanceInMainUi)
+        {
+            ySize -= (40 * globalScale) + 18;
+        }
+
+        
 
         ImGui.BeginChild("list", new Vector2(_windowContentWidth, ySize), border: false);
 
@@ -303,6 +312,8 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private void DrawServerStatus()
     {
+        float globalScale = ImGuiHelpers.GlobalScale;
+        
         if (_apiController.ConnectedServerIndexes.Length >= 1)
         {
             var onlineMessage = "Loading";
@@ -329,9 +340,9 @@ public class CompactUi : WindowMediatorSubscriberBase
                 }
 
                 ImGui.AlignTextToFramePadding();
-                ImGui.SetCursorPosX((160 - ImGui.CalcTextSize(onlineMessage).X) / 2);
+                ImGui.SetCursorPosX((160 * globalScale - ImGui.CalcTextSize(onlineMessage).X) / 2);
                 ImGui.TextColored(ImGuiColors.ParsedGreen, onlineMessage);
-                ImGui.SameLine(160);
+                ImGui.SameLine(160 * globalScale);
             }
 
             if (_apiController.AnyServerConnected && _apiController.ConnectedServerIndexes.Length == 1)
@@ -363,12 +374,12 @@ public class CompactUi : WindowMediatorSubscriberBase
             var userCount = _apiController.OnlineUsers.ToString(CultureInfo.InvariantCulture);
 
             ImGui.AlignTextToFramePadding();
-            ImGui.SetCursorPosX((150 - ImGui.CalcTextSize(usersOnlineMessage + userCount).X) / 2);
+            ImGui.SetCursorPosX(((150 * globalScale) - ImGui.CalcTextSize(usersOnlineMessage + userCount).X) / 2);
             ImGui.TextColored(ImGuiColors.ParsedGreen, userCount);
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.TextUnformatted(usersOnlineMessage);
-            ImGui.SameLine(160);
+            ImGui.SameLine(160 * globalScale);
 
 
             using (ImRaii.PushId("downloads")) DrawDownloads();
@@ -571,6 +582,8 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private void DrawModLoad()
     {
+        float globalScale = ImGuiHelpers.GlobalScale;
+        
         CheckForCharacterAnalysis();
 
         if (_cachedAnalysis == null)
@@ -589,43 +602,23 @@ public class CompactUi : WindowMediatorSubscriberBase
         ImGui.SameLine();
         ImGui.TextUnformatted($"{UiSharedService.ByteToString(playerLoadMemory)}");
 
-        ImGui.SameLine((ImGui.GetWindowWidth() - 16) / 2);
+        ImGui.SameLine((ImGui.GetWindowWidth() - 16 * globalScale) / 2);
         ImGui.TextUnformatted("Tri:");
         ImGui.SameLine();
         ImGui.TextUnformatted($"{playerLoadTriangles}");
 
-        ImGui.SameLine(ImGui.GetWindowWidth() - 27);
+        ImGui.SameLine(ImGui.GetWindowWidth() - 27 * globalScale);
         ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudGrey);
         _uiSharedService.IconText(FontAwesomeIcon.QuestionCircle);
+        ImGui.PopStyleColor();
         if (ImGui.IsItemHovered())
         {
-            ImGui.SameLine();
-            _uiSharedService.IconText(FontAwesomeIcon.PersonCircleQuestion);
-            if (ImGui.IsItemHovered())
-            {
-                var unconvertedTextures = _characterAnalyzer.UnconvertedTextureCount;
-
-                if (ImGui.IsItemClicked())
-                {
-                    Mediator.Publish(new UiToggleMessage(typeof(DataAnalysisUi)));
-                }
-
-                if (unconvertedTextures > 0)
-                {
-                    UiSharedService.AttachToolTip(
-                        $"You have {unconvertedTextures} texture(s) that are not compressed. Consider converting them to BC7 to reduce their size." +
-                        UiSharedService.TooltipSeparator +
-                        "Click to open the Character Data Analysis");
-                }
-            }
 
             UiSharedService.AttachToolTip(
                 $"This information uses your own settings for the warning and auto-pause threshold for comparison." +
                 Environment.NewLine +
                 "This can be configured under Settings -> Performance.");
         }
-
-        ImGui.PopStyleColor();
 
         if (config.VRAMSizeAutoPauseThresholdMiB > 0)
         {
@@ -663,7 +656,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         }
 
 
-        ImGui.SameLine(ImGui.GetWindowWidth() - 31);
+        ImGui.SameLine(ImGui.GetWindowWidth() - (26 * globalScale) - 5);
         _uiSharedService.IconButton(FontAwesomeIcon.PersonCircleQuestion);
         if (ImGui.IsItemHovered())
         {
@@ -677,7 +670,7 @@ public class CompactUi : WindowMediatorSubscriberBase
             if (unconvertedTextures > 0)
             {
                 UiSharedService.AttachToolTip(
-                    $"You have {unconvertedTextures} texture(s) that are not BC7 format. Consider converting them to BC7 to reduce their size." +
+                    $"You have {unconvertedTextures} texture(s) that are not in a compressed format. Consider converting them to BC7 to reduce their size." +
                     UiSharedService.TooltipSeparator +
                     "Click to open the Character Data Analysis");
             }
@@ -724,6 +717,8 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private void ServerSelection()
     {
+        float globalScale = ImGuiHelpers.GlobalScale;
+        
         ImGui.Spacing();
 
         _pairTabServerSelector.Draw(_serverConfigurationManager.GetServerNames(), _apiController.EnabledServerIndexes,
@@ -732,7 +727,7 @@ public class CompactUi : WindowMediatorSubscriberBase
         _tabMenu.pairTabSelectedServer = _pairTabSelectedServer;
         
         UiSharedService.AttachToolTip("Server to use for quick actions");
-
+        
         ImGui.SameLine();
         if (_uiSharedService.IconButton(FontAwesomeIcon.UserCircle, "Edit Profile"))
         {
@@ -754,13 +749,13 @@ public class CompactUi : WindowMediatorSubscriberBase
             _serverConfigurationManager.GetServerNameByIndex(_pairTabSelectedServer));
 
         ImGui.SetNextItemWidth(ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X -
-                               ImGui.GetStyle().ItemSpacing.X - 205);
+                               ImGui.GetStyle().ItemSpacing.X - (180 * globalScale) - 25);
         ImGui.InputTextWithHint("##otheruid", "New Pair UID", ref _pairToAdd, 20);
         ImGui.SameLine();
 
         using (ImRaii.Disabled(string.IsNullOrEmpty(_pairToAdd)))
         {
-            if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserPlus, "Pair", 52))
+            if (_uiSharedService.IconTextButton(FontAwesomeIcon.UserPlus, "Pair", 52 * globalScale))
             {
                 // Adds pair for the current
                 _ = _apiController.UserAddPairToServer(_pairTabSelectedServer, _pairToAdd);
@@ -776,7 +771,7 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         ImGui.SameLine();
 
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Plus, "Create", 70))
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Plus, "Create", 70 * globalScale))
         {
             _syncMediator.Publish(new UiToggleMessage(typeof(CreateSyncshellUI)));
         }
@@ -785,7 +780,7 @@ public class CompactUi : WindowMediatorSubscriberBase
 
         ImGui.SameLine();
 
-        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Users, "Join", 52))
+        if (_uiSharedService.IconTextButton(FontAwesomeIcon.Users, "Join", 52 * globalScale))
         {
             _syncMediator.Publish(new UiToggleMessage(typeof(JoinSyncshellUI)));
         }
@@ -799,8 +794,10 @@ public class CompactUi : WindowMediatorSubscriberBase
 
     private static void DrawProgressBar(float value, string tooltipText, bool warning = false, bool alert = false)
     {
-        float width = (ImGui.GetWindowWidth() - 54);
-        var progressBarSize = new Vector2(width / 2, 20);
+        float globalScale = ImGuiHelpers.GlobalScale;
+        
+        float width = (ImGui.GetWindowWidth() - 30 - (24 * globalScale));
+        var progressBarSize = new Vector2(width / 2, 20 * globalScale);
 
         if (warning)
             ImGui.PushStyleColor(ImGuiCol.Text, ImGuiColors.DalamudYellow);
