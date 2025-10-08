@@ -204,7 +204,8 @@ public class ServerConfigurationManager
                 Id = index,
                 Name = v.ServerName,
                 Uri = v.ServerUri,
-                HubUri = v.ServerHubUri
+                HubUri = v.ServerHubUri,
+                DDownload = v.UseDirectDownload
             }).ToList();
         return items;
     }

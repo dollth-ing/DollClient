@@ -1262,7 +1262,8 @@ public class SettingsUi : WindowMediatorSubscriberBase
                 var serverUri = selectedServer.ServerUri;
                 var serverHubUri = selectedServer.ServerHubUri ?? selectedServer.ServerUri;
                 var useAdvancedUris = selectedServer.UseAdvancedUris;
-
+                var useDirectDownload = selectedServer.UseDirectDownload;
+                
                 if (ImGui.InputText("Service Name", ref serverName, 255))
                 {
                     selectedServer.ServerName = serverName;
@@ -1274,12 +1275,20 @@ public class SettingsUi : WindowMediatorSubscriberBase
                     selectedServer.ServerUri = serverUri;
                     _serverConfigurationManager.Save();
                 }
-
+                
+                if (ImGui.Checkbox("Server Side Hashing", ref useDirectDownload))
+                {
+                    selectedServer.UseDirectDownload = useDirectDownload;
+                    _serverConfigurationManager.Save();
+                }
+                
                 if (ImGui.Checkbox("Advanced URIs", ref useAdvancedUris))
                 {
                     selectedServer.UseAdvancedUris = useAdvancedUris;
                     _serverConfigurationManager.Save();
                 }
+                
+                
 
                 _uiShared.DrawHelpText("Configure the API & Hub URI individually");
                 if (useAdvancedUris)
